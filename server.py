@@ -5,18 +5,20 @@ import threading
 global clients
 
 
-def traiter_client(sock_fille):
+def process_client(client):
 
     # Wait for the client to send a username
-    username = sock_fille.recv(256).decode('utf-8')
+    username = client.recv(256).decode('utf-8')
 
     # Check if the username is already in use
     while username in clients.values():
-        sock_fille.sendall(str.encode("402\n"))
-        username = sock_fille.recv(256).decode('utf-8')
+        client.sendall(str.encode("402\n"))
+        username = client.recv(256).decode('utf-8')
+
+    client.sendall(str.encode("200\n"))
 
     # Add the client to the list of connected clients
-    clients[sock_fille] = username
+    clients[client] = username
 
     # Send a welcome message to the client
     for client in clients.keys():
@@ -25,16 +27,37 @@ def traiter_client(sock_fille):
     while True:
         try:
             # Wait for the client to send a message
-            message = sock_fille.recv(256).decode()
+            message = client.recv(256).decode()
 
             # Check for the /all command
-            if message.startswith("/all "):
+            if message.startswith("/msg "):
+                client.sendall(str.encode("200"))
                 # Send the message to all connected clients
                 for client in clients.keys():
                     client.sendall(str.encode(f"{username}: {message[5:]}\n"))
 
+            elif message.startswith("/exit"):
+                client.sendall(str.encode("200"))
+                client.close()
+                for client in clients.keys():
+                    client.sendall(str.encode(f"\n{username} left the chatroom.\n"))
+                del clients[client]
+
+            elif message.startswith("/afk"):
+                client.sendall(str.encode("200"))
+                for client in clients.keys():
+                    client.sendall(str.encode(f"\n{username} is now afk.\n"))
+
+            elif message.startswith("/users"):
+                res = "["
+                for client_socket, username in clients:
+                    res += username + ", "
+                res = res[:-2]
+                res = "]"
+                client.sendall(str.encode(res))
+
         except KeyboardInterrupt:
-            sock_fille.close()
+            client.close()
             break
 
 
@@ -54,7 +77,7 @@ if __name__ == '__main__':
                 sock_client, adr_client = sock_locale.accept()
                 print("Client connected " + str(adr_client))
                 state = "login"
-                threading.Thread(target=traiter_client, args=(sock_client, )).start()
+                threading.Thread(target=process_client, args=(sock_client,)).start()
             except KeyboardInterrupt:
                 break
     print("Bye")

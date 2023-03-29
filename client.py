@@ -30,6 +30,7 @@ def send_messages(sock):
     sock.sendall(str.encode(username))
 
     t = threading.Thread(target=check_username, args=(sock, ))
+    t.start()
 
     while True:
         # Wait for user to input a message
