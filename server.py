@@ -52,6 +52,27 @@ def process_client(client):
                 res = "]"
                 client.sendall(str.encode(res))
 
+            elif message.startswith("/rename"):
+                if message[9:] not in clients.values()[0]:
+                    client.sendall(str.encode("402"))
+                    for client in clients.keys():
+                        client.sendall(str.encode(f"\n{clients[client][0]} changes his name to {message[9:]} .\n"))
+                    clients[client][0] = message[9:]
+                else :
+                    client.sendall(str.encode("425"))
+
+            elif message.startswith("/ping"):
+                boo = False
+                for client_socket, tuple in clients.items():
+                    if tuple[0] == message[5:]:
+                        client_socket.sendall(str.encode(f"\n{clients[client][0]} pings you in channel.\n"))
+                        boo = True
+                        break
+                client.sendall(str.encode("200"))
+                if boo == False:
+                    client.sendall(str.encode("402"))
+                    
+
         except KeyboardInterrupt:
             client.close()
             break
