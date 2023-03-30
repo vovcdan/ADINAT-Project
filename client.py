@@ -16,6 +16,7 @@ def receive_messages(sock):
 def check_username(sock):
     while True:
         code = sock.recv(1024).decode()
+        print(f"Received code: {code}")
         if code == "402":
             print("TEST")
             username = input("Username already taken, choose another: ")
@@ -35,8 +36,6 @@ def send_messages(sock):
     while True:
         # Wait for user to input a message
         message = input()
-        if message == "/quit":
-            break
         # Send message to server
         sock.sendall(str.encode(message))
 

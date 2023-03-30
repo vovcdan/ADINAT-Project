@@ -7,50 +7,46 @@ global clients
 
 def process_client(client):
 
-    # Wait for the client to send a username
-    username = client.recv(256).decode('utf-8')
-
-    # Check if the username is already in use
-    while username in clients.values():
-        client.sendall(str.encode("402\n"))
-        username = client.recv(256).decode('utf-8')
-
-    client.sendall(str.encode("200\n"))
-
-    # Add the client to the list of connected clients
-    clients[client] = username
-
-    # Send a welcome message to the client
-    for client in clients.keys():
-        client.sendall(str.encode(f"\n{username} connected to the chatroom!\n"))
-
     while True:
         try:
-            # Wait for the client to send a message
             message = client.recv(256).decode()
 
-            # Check for the /all command
-            if message.startswith("/msg "):
-                client.sendall(str.encode("200"))
-                # Send the message to all connected clients
+            if message.startswith("/login"):
+                username = client.recv(256).decode('utf-8')
+                client_state = "logging"
+                while username in clients.values():
+                    client.sendall(str.encode("402"))
+                    username = client.recv(256).decode('utf-8')
+                client.sendall(str.encode("200\n"))
+                client_state = "chatting"
+                clients[client] = (username, client_state)
                 for client in clients.keys():
-                    client.sendall(str.encode(f"{username}: {message[5:]}\n"))
+                    client.sendall(str.encode(f"\n{username} connected to the chatroom!\n"))
+
+            elif message.startswith("/msg "):
+                if clients[client][1] == "chatting":
+                    client.sendall(str.encode("200"))
+                    for client in clients.keys():
+                        client.sendall(str.encode(f"{clients[client][0]}: {message[5:]}\n"))
+                else:
+                    client.sendall(str.encode("410"))
 
             elif message.startswith("/exit"):
                 client.sendall(str.encode("200"))
                 client.close()
                 for client in clients.keys():
-                    client.sendall(str.encode(f"\n{username} left the chatroom.\n"))
+                    client.sendall(str.encode(f"\n{clients[client][0]} left the chatroom.\n"))
                 del clients[client]
 
             elif message.startswith("/afk"):
                 client.sendall(str.encode("200"))
+                clients[client][1] = "afk"
                 for client in clients.keys():
-                    client.sendall(str.encode(f"\n{username} is now afk.\n"))
+                    client.sendall(str.encode(f"\n{clients[client][0]} is now afk.\n"))
 
             elif message.startswith("/users"):
                 res = "["
-                for client_socket, username in clients:
+                for username in clients.values()[0]:
                     res += username + ", "
                 res = res[:-2]
                 res = "]"
