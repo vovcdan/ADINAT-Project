@@ -1,59 +1,56 @@
 import socket
 import threading
+import sys
+
+HOST = '127.0.0.1'
+PORT = 8888
+SIZE = 1024
+FORMAT = 'utf-8'
 
 
-def receive_messages(sock):
+def receive_message(client_socket):
+    username = input("Enter your username: ")
+    client_socket.sendall(username.encode())
+    from_server = client_socket.recv(SIZE).decode(FORMAT)
+    print(from_server)
+    while from_server == "425":
+        print(f"Username {username} is already taken")
+        username = input("Choose another username: ")
+        client_socket.sendall(username.encode())
+        from_server = client_socket.recv(SIZE).decode(FORMAT)
+
     while True:
         try:
-            # Receive incoming messages from the server
-            message = sock.recv(1024).decode()
-            print(message, end="")
+            from_server = client_socket.recv(SIZE).decode(FORMAT)
+            print(f"From Server: {from_server}")
         except ConnectionResetError:
             print("\nDisconnected from server.")
             break
 
 
-def check_username(sock):
+def send_message(client_socket):
     while True:
-        code = sock.recv(1024).decode()
-        print(f"Received code: {code}")
-        if code == "402":
-            print("TEST")
-            username = input("Username already taken, choose another: ")
-            sock.sendall(str.encode(username))
-        else:
-            break
+        try:
+            message = input()
+            client_socket.sendall(message.encode(FORMAT))
+        except ConnectionError:
+            pass
+    # while True:
+    #     try:
+    #         message = input()
+    #         client_socket.sendall(message.encode(FORMAT))
+    #     except ConnectionError:
+    #         pass
 
 
-def send_messages(sock):
-    # Send a username to the server
-    username = input("Enter a username: ")
-    sock.sendall(str.encode(username))
-
-    t = threading.Thread(target=check_username, args=(sock, ))
-    t.start()
-
-    while True:
-        # Wait for user to input a message
-        message = input()
-        # Send message to server
-        sock.sendall(str.encode(message))
+def get_message():
+    pass
 
 
-if __name__ == "__main__":
-    # Connect to server
-    host = "localhost"
-    port = 8888
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.connect((host, port))
-        print("Connected to server.")
+if __name__ == '__main__':
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as socket:
+        socket.connect((HOST, PORT))
 
-        # Start threads to send and receive messages
-        receive_thread = threading.Thread(target=receive_messages, args=(sock,))
-        receive_thread.start()
-        send_thread = threading.Thread(target=send_messages, args=(sock,))
-        send_thread.start()
+        threading.Thread(target=receive_message, args=(socket, )).start()
+        threading.Thread(target=send_message, args=(socket, )).start()
 
-        # Wait for threads to finish
-        receive_thread.join()
-        send_thread.join()

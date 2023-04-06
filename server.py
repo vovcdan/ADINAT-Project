@@ -3,57 +3,94 @@ import sys
 import threading
 
 global clients
+FORMAT = 'utf-8'
+SIZE = 1024
 
 
-def process_client(client):
+def broadcast(message):
+    for username, info in clients.items():
+        socket_client = info['socket']
+        socket_client.sendall(message.encode(FORMAT))
 
+
+def process_client(client_socket):
+    username = None
     while True:
         try:
-            message = client.recv(256).decode()
+            message = client_socket.recv(SIZE).decode(FORMAT)
+            command = message.split(" ", 1)
 
-            if message.startswith("/login"):
-                username = client.recv(256).decode('utf-8')
-                client_state = "logging"
-                while username in clients.values():
-                    client.sendall(str.encode("402"))
-                    username = client.recv(256).decode('utf-8')
-                client.sendall(str.encode("200\n"))
-                client_state = "chatting"
-                clients[client] = (username, client_state)
-                for client in clients.keys():
-                    client.sendall(str.encode(f"\n{username} connected to the chatroom!\n"))
-
-            elif message.startswith("/msg "):
-                if clients[client][1] == "chatting":
-                    client.sendall(str.encode("200"))
-                    for client in clients.keys():
-                        client.sendall(str.encode(f"{clients[client][0]}: {message[5:]}\n"))
+            if command[0] == "signup":
+                if command[1] in clients.keys():
+                    client_socket.sendall("425".encode(FORMAT))
                 else:
-                    client.sendall(str.encode("410"))
+                    client_socket.sendall("200".encode(FORMAT))
+                    username = command[1]
+                    clients[username] = {'socket': client_socket, 'state': 'chatting'}
+                    broadcast(f"{username} has connected to the chatroom!")
 
-            elif message.startswith("/exit"):
-                client.sendall(str.encode("200"))
-                client.close()
-                for client in clients.keys():
-                    client.sendall(str.encode(f"\n{clients[client][0]} left the chatroom.\n"))
-                del clients[client]
+            elif command[0] == "msg":
+                if clients[username]['state'] == 'chatting':
+                    client_socket.sendall("200".encode(FORMAT))
+                    mess = f"{username}: "
+                    for mot in command[1:]:
+                        mess += mot + " "
+                    mess = mess[:-1]
+                    broadcast(mess)
+                else:
+                    client_socket.sendall("410".encode(FORMAT))
 
-            elif message.startswith("/afk"):
-                client.sendall(str.encode("200"))
-                clients[client][1] = "afk"
-                for client in clients.keys():
-                    client.sendall(str.encode(f"\n{clients[client][0]} is now afk.\n"))
+            elif command[0] == "exit":
+                client_socket.sendall("200".encode())
+                client_socket.close()
+                broadcast(f"{username} has left the chatroom!")
+                del clients[username]
 
-            elif message.startswith("/users"):
+            elif command[0] == "afk":
+                if clients[username]['state'] == 'chatting':
+                    client_socket.sendall("200".encode(FORMAT))
+                    clients[username]['state'] = 'afk'
+                    broadcast(f"{username} is now away from keyboard!")
+                else:
+                    client_socket.sendall("409".encode(FORMAT))
+
+            elif command[0] == "btk":
+                if clients[username]['state'] == 'afk':
+                    client_socket.sendall("200".encode(FORMAT))
+                    clients[username]['state'] = 'chatting'
+                    broadcast(f"{username} is now back to keyboard!")
+                else:
+                    client_socket.sendall("409".encode(FORMAT))
+
+            elif command[0] == "users":
                 res = "["
-                for username in clients.values()[0]:
+                for username in clients.keys():
                     res += username + ", "
                 res = res[:-2]
-                res = "]"
-                client.sendall(str.encode(res))
+                res += "]"
+                client_socket.sendall(res.encode(FORMAT))
 
-        except KeyboardInterrupt:
-            client.close()
+            elif command[0] == "ping":
+                if command[1] in clients.keys():
+                    client_socket.sendall("402".encode(FORMAT))
+                    continue
+                pinged_client = clients[command[1]]['socket']
+                pinged_client.sendall(f"{username} is pinging you!")
+                client_socket.sendall("200".encode(FORMAT))
+
+            elif command[0] == "channel":
+                if command[1] in clients.keys():
+                    client_socket.sendall("402".encode(FORMAT))
+                    continue
+                pinged_client = clients[command[1]]['socket']
+                pinged_client.sendall(f"{username} wants to private chat with you. Do you accept?")
+
+            else:
+                client_socket.sendall(str.encode("No command found.\n"))
+
+        except ConnectionError:
+            del clients[username]
+            client_socket.close()
             break
 
 
@@ -72,7 +109,6 @@ if __name__ == '__main__':
             try:
                 sock_client, adr_client = sock_locale.accept()
                 print("Client connected " + str(adr_client))
-                state = "login"
                 threading.Thread(target=process_client, args=(sock_client,)).start()
             except KeyboardInterrupt:
                 break
