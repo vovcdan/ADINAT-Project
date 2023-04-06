@@ -1,6 +1,7 @@
 import socket
 import sys
 import threading
+import re
 
 global clients
 FORMAT = 'utf-8'
@@ -13,84 +14,444 @@ def broadcast(message):
         socket_client.sendall(message.encode(FORMAT))
 
 
-def process_client(client_socket):
+def is_user_connected(socket):
+    if socket in [info['socket'] for info in clients.values()]:
+        return True
+    return False
+
+
+def get_username_from_socket(socket):
     username = None
+    for name, info in clients.items():
+        if info['socket'] == socket:
+            username = name
+    return username
+
+
+def get_friends_from_socket(socket):
+    friends = []
+    for name, info in clients.items():
+        if info['socket'] == socket:
+            friends = info['friends']
+    return friends
+
+
+def get_pending_friends_from_socket(socket):
+    pending = []
+    for name, info in clients.items():
+        if info['socket'] == socket:
+            pending = info['pending_friends']
+    return pending
+
+
+def get_pending_files_from_socket(socket):
+    pending = []
+    for name, info in clients.items():
+        if info['socket'] == socket:
+            pending = info['pending_files']
+    return pending
+
+
+def get_state_from_socket(socket):
+    state = None
+    for name, info in clients.items():
+        if info['socket'] == socket:
+            state = info['state']
+    return state
+
+
+def check_username_chars(s):
+    pattern = r"^[a-zA-Z]+$"
+    return re.match(pattern, s) is not None
+
+
+def signup(socket, message):
+    if len(message) != 2:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    for user, dic in clients.items():
+        if dic['socket'] == socket and dic['state'] is not None:
+            socket.sendall("417".encode(FORMAT))
+            return
+
+    if message[1] in clients.keys():
+        socket.sendall("425".encode(FORMAT))
+        return
+
+    if not check_username_chars(message[1]):
+        socket.sendall("426".encode(FORMAT))
+        return
+
+    signup_from_srv(socket, message[1])
+    socket.sendall("200".encode(FORMAT))
+
+
+def signup_from_srv(socket, username):
+    clients[username] = {'socket': socket,
+                         'state': 'chatting',
+                         'friends': [],
+                         'pending_friends': [],
+                         'pending_files': []}
+    broadcast(f"signupFromSrv|{username}")
+
+
+def msg(socket, message):
+    command = message[0]
+    mess = ' '.join(message[1:])
+    total = [command, mess]
+
+    if len(total) != 2:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if mess == "":
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    username = get_username_from_socket(socket)
+
+    if clients[username]['state'] == 'afk':
+        socket.sendall("430".encode(FORMAT))
+        return
+
+    if clients[username]['state'] == 'chatting':
+        msg_from_server(username, mess)
+        socket.sendall("200".encode(FORMAT))
+
+
+def msg_from_server(username, message):
+    broadcast(f"msgFromServer|{username}|{message}")
+
+
+def exit(socket, message):
+    if len(message) != 1:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    exit_from_server(socket)
+    socket.sendall("200".encode(FORMAT))
+
+
+def exit_from_server(socket):
+    username = get_username_from_socket(socket)
+    local_sock = socket
+    del clients[username]
+    local_sock.close()
+    broadcast(f"exitFromSrv|{username}")
+
+
+def afk(socket, message):
+    if len(message) != 1:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if get_state_from_socket(socket) == 'afk':
+        socket.sendall("415".encode(FORMAT))
+        return
+
+    afk_from_server(socket)
+    socket.sendall("200".encode(FORMAT))
+
+
+def afk_from_server(socket):
+    username = get_username_from_socket(socket)
+    clients[username]['state'] = 'afk'
+    broadcast(f"afkFromSrv|{username}")
+
+
+def btk(socket, message):
+    if len(message) != 1:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if get_state_from_socket(socket) == 'chatting':
+        socket.sendall("416".encode(FORMAT))
+        return
+
+    btk_from_server(socket)
+    socket.sendall("200".encode(FORMAT))
+
+
+def btk_from_server(socket):
+    username = get_username_from_socket(socket)
+    clients[username]['state'] = 'chatting'
+    broadcast(f"btkFromSrv|{username}")
+
+
+def users(socket, message):
+    if len(message) != 1:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if get_state_from_socket(socket) == 'afk':
+        socket.sendall("430".encode(FORMAT))
+        return
+
+    users_from_server(socket)
+    socket.sendall("200".encode(FORMAT))
+
+
+def users_from_server(socket):
+    res = "usersFromSrv|["
+    for username in clients.keys():
+        res += f"{username}, "
+    res = res[:-2]
+    res += "]"
+    socket.sendall(res.encode(FORMAT))
+
+
+def ping(socket, message):
+    if len(message) != 2:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if get_state_from_socket(socket) == 'afk':
+        socket.sendall("430".encode(FORMAT))
+        return
+
+    if message[1] not in clients.keys():
+        socket.sendall("406".encode(FORMAT))
+        return
+
+    targeted_socket = clients[message[1]]['socket']
+
+    if targeted_socket == socket:
+        socket.sendall("407".encode(FORMAT))
+        return
+
+    ping_from_server(socket, targeted_socket)
+    socket.sendall("200".encode(FORMAT))
+
+
+def ping_from_server(socket, target_socket):
+    username = get_username_from_socket(socket)
+    target_socket.sendall(f"pingFromSrv|{username}".encode(FORMAT))
+
+
+def rename(socket, message):
+    if len(message) != 2:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if get_state_from_socket(socket) == 'afk':
+        socket.sendall("430".encode(FORMAT))
+        return
+
+    if message[1] in clients.keys():
+        socket.sendall("425".encode(FORMAT))
+        return
+
+    if not check_username_chars(message[1]):
+        socket.sendall("426".encode(FORMAT))
+        return
+
+    rename_from_server(socket, message[1])
+    socket.sendall("200".encode(FORMAT))
+
+
+def rename_from_server(socket, new_username):
+    username = get_username_from_socket(socket)
+    friends = get_friends_from_socket(socket)
+    pending_friends = get_pending_friends_from_socket(socket)
+    pending_files = get_pending_files_from_socket(socket)
+    clients[new_username] = {'socket': socket,
+                             'state': 'chatting',
+                             'friends': friends,
+                             'pending_friends': pending_friends,
+                             'pending_files': pending_files}
+    del clients[username]
+    broadcast(f"renameFromSrv|{username}|{new_username}")
+
+
+def channel(socket, message):
+    if len(message) != 2:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if get_state_from_socket(socket) == 'afk':
+        socket.sendall("430".encode(FORMAT))
+        return
+
+    if message[1] not in clients.keys():
+        socket.sendall("406".encode(FORMAT))
+        return
+
+    targeted_socket = clients[message[1]]['socket']
+
+    if targeted_socket == socket:
+        socket.sendall("407".encode(FORMAT))
+        return
+
+    username = get_username_from_socket(socket)
+    friends = get_friends_from_socket(socket)
+    targeted_friends = get_friends_from_socket(targeted_socket)
+
+    if message[1] in friends or username in targeted_friends:
+        socket.sendall("440".encode(FORMAT))
+        return
+
+    channel_from_server(socket, targeted_socket, username, message[1], friends, targeted_friends)
+    socket.sendall("200".encode(FORMAT))
+
+
+def channel_from_server(socket, target_socket, username, target_username, friends, targeted_friends):
+    target_socket.sendall(f"channelFromSrv|{username}|")
+
+
+def acceptchannel(socket, message):
+    if len(message) != 2:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if get_state_from_socket(socket) == 'afk':
+        socket.sendall("430".encode(FORMAT))
+        return
+
+    if message[1] not in clients.keys():
+        socket.sendall("406".encode(FORMAT))
+        return
+
+    targeted_socket = clients[message[1]]['socket']
+
+    if targeted_socket == socket:
+        socket.sendall("407".encode(FORMAT))
+        return
+
+
+def acceptchannel_from_server(socket):
+    pass
+
+
+def declinechannel(socket, message):
+    if len(message) != 2:
+        socket.sendall("403".encode(FORMAT))
+        return
+
+    if not is_user_connected(socket):
+        socket.sendall("418".encode(FORMAT))
+        return
+
+    if get_state_from_socket(socket) == 'afk':
+        socket.sendall("430".encode(FORMAT))
+        return
+
+    if message[1] not in clients.keys():
+        socket.sendall("406".encode(FORMAT))
+        return
+
+    targeted_socket = clients[message[1]]['socket']
+
+    if targeted_socket == socket:
+        socket.sendall("407".encode(FORMAT))
+        return
+
+
+def declinechannel_from_server(socket):
+    pass
+
+
+def sharefile(socket, message):
+    pass
+
+
+def sharefile_from_server(socket):
+    pass
+
+
+def acceptfile(socket, message):
+    pass
+
+
+def acceptfile_from_server(socket):
+    pass
+
+
+def declinefile(socket, message):
+    pass
+
+
+def declinefile_from_server():
+    pass
+
+
+def process_client(client_socket):
     while True:
         try:
             message = client_socket.recv(SIZE).decode(FORMAT)
-            command = message.split(" ", 1)
-
+            command = message.split(" ")
             if command[0] == "signup":
-                if command[1] in clients.keys():
-                    client_socket.sendall("425".encode(FORMAT))
-                else:
-                    client_socket.sendall("200".encode(FORMAT))
-                    username = command[1]
-                    clients[username] = {'socket': client_socket, 'state': 'chatting'}
-                    broadcast(f"{username} has connected to the chatroom!")
-
+                signup(client_socket, command)
             elif command[0] == "msg":
-                if clients[username]['state'] == 'chatting':
-                    client_socket.sendall("200".encode(FORMAT))
-                    mess = f"{username}: "
-                    for mot in command[1:]:
-                        mess += mot + " "
-                    mess = mess[:-1]
-                    broadcast(mess)
-                else:
-                    client_socket.sendall("410".encode(FORMAT))
-
-            elif command[0] == "exit":
-                client_socket.sendall("200".encode())
-                client_socket.close()
-                broadcast(f"{username} has left the chatroom!")
-                del clients[username]
-
+                msg(client_socket, command)
+            elif command[0] == "exit":  # NOT WORKING AS INTENDED
+                exit(client_socket, command)
             elif command[0] == "afk":
-                if clients[username]['state'] == 'chatting':
-                    client_socket.sendall("200".encode(FORMAT))
-                    clients[username]['state'] = 'afk'
-                    broadcast(f"{username} is now away from keyboard!")
-                else:
-                    client_socket.sendall("409".encode(FORMAT))
-
+                afk(client_socket, command)
             elif command[0] == "btk":
-                if clients[username]['state'] == 'afk':
-                    client_socket.sendall("200".encode(FORMAT))
-                    clients[username]['state'] = 'chatting'
-                    broadcast(f"{username} is now back to keyboard!")
-                else:
-                    client_socket.sendall("409".encode(FORMAT))
-
+                btk(client_socket, command)
             elif command[0] == "users":
-                res = "["
-                for username in clients.keys():
-                    res += username + ", "
-                res = res[:-2]
-                res += "]"
-                client_socket.sendall(res.encode(FORMAT))
-
+                users(client_socket, command)
             elif command[0] == "ping":
-                if command[1] in clients.keys():
-                    client_socket.sendall("402".encode(FORMAT))
-                    continue
-                pinged_client = clients[command[1]]['socket']
-                pinged_client.sendall(f"{username} is pinging you!")
-                client_socket.sendall("200".encode(FORMAT))
-
+                ping(client_socket, command)
             elif command[0] == "channel":
-                if command[1] in clients.keys():
-                    client_socket.sendall("402".encode(FORMAT))
-                    continue
-                pinged_client = clients[command[1]]['socket']
-                pinged_client.sendall(f"{username} wants to private chat with you. Do you accept?")
-
+                channel(client_socket, command)
+            elif command[0] == "rename":
+                rename(client_socket, command)
+            elif command[0] == "acceptchannel":
+                acceptchannel(client_socket, command)
+            elif command[0] == "declinechannel":
+                declinechannel(client_socket, command)
+            elif command[0] == "sharefile":
+                sharefile(client_socket, command)
+            elif command[0] == "acceptfile":
+                acceptfile(client_socket, command)
+            elif command[0] == "declinefile":
+                declinefile(client_socket, command)
             else:
-                client_socket.sendall(str.encode("No command found.\n"))
+                client_socket.sendall("400".encode(FORMAT))
 
-        except ConnectionError:
+        except ConnectionResetError:
+            username = get_username_from_socket(client_socket)
             del clients[username]
             client_socket.close()
+            broadcast(f"exitFromSrv|{username}")
             break
 
 
@@ -101,17 +462,18 @@ if __name__ == '__main__':
 
     print("Server is now running.")
     clients = {}
+    usernames = []
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock_locale:
-        sock_locale.bind(("", int(sys.argv[1])))
-        sock_locale.listen(4)
-        while True:
-            try:
-                sock_client, adr_client = sock_locale.accept()
-                print("Client connected " + str(adr_client))
-                threading.Thread(target=process_client, args=(sock_client,)).start()
-            except KeyboardInterrupt:
-                break
+    sock_locale = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock_locale.bind(("", int(sys.argv[1])))
+    sock_locale.listen(4)
+    while True:
+        try:
+            sock_client, adr_client = sock_locale.accept()
+            print("Client connected " + str(adr_client))
+            threading.Thread(target=process_client, args=(sock_client,)).start()
+        except KeyboardInterrupt:
+            break
     print("Bye")
 
     for t in threading.enumerate():
