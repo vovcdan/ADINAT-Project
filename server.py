@@ -2,6 +2,7 @@ import socket
 import sys
 import threading
 import re
+from user import User
 
 global clients
 FORMAT = 'utf-8'
@@ -9,55 +10,37 @@ SIZE = 1024
 
 
 def broadcast(message):
-    for username, info in clients.items():
-        socket_client = info['socket']
+    for user in clients:
+        socket_client = user.socket
         socket_client.sendall(message.encode(FORMAT))
 
 
 def is_user_connected(socket):
-    if socket in [info['socket'] for info in clients.values()]:
-        return True
+    for user in clients:
+        if user.socket == socket:
+            return True
     return False
 
 
-def get_username_from_socket(socket):
-    username = None
-    for name, info in clients.items():
-        if info['socket'] == socket:
-            username = name
-    return username
+def find_user_by_socket(socket):
+    for user in clients:
+        if user.socket == socket:
+            return user
+    return None
 
 
-def get_friends_from_socket(socket):
-    friends = []
-    for name, info in clients.items():
-        if info['socket'] == socket:
-            friends = info['friends']
-    return friends
+def find_user_by_username(username):
+    for user in clients:
+        if user.username == username:
+            return user
+    return None
 
 
-def get_pending_friends_from_socket(socket):
-    pending = []
-    for name, info in clients.items():
-        if info['socket'] == socket:
-            pending = info['pending_friends']
-    return pending
-
-
-def get_pending_files_from_socket(socket):
-    pending = []
-    for name, info in clients.items():
-        if info['socket'] == socket:
-            pending = info['pending_files']
-    return pending
-
-
-def get_state_from_socket(socket):
-    state = None
-    for name, info in clients.items():
-        if info['socket'] == socket:
-            state = info['state']
-    return state
+def find_socket(username):
+    for user in clients:
+        if user.username == username:
+            return user.socket
+    return None
 
 
 def check_username_chars(s):
@@ -65,35 +48,45 @@ def check_username_chars(s):
     return re.match(pattern, s) is not None
 
 
+def remove_user(socket):
+    index = None
+    for i, user in enumerate(clients):
+        if user.socket == socket:
+            index = i
+            break
+
+    if index is not None:
+        del clients[index]
+
+
 def signup(socket, message):
+    # checks if command has the right number of parameters
     if len(message) != 2:
         socket.sendall("403".encode(FORMAT))
         return
 
-    for user, dic in clients.items():
-        if dic['socket'] == socket and dic['state'] is not None:
+    # checks if user is already logged in and if username is already taken
+    for user in clients:
+        if user.socket == socket and user.state is not None:
             socket.sendall("417".encode(FORMAT))
             return
+        if message[1] == user.username:
+            socket.sendall("425".encode(FORMAT))
+            return
 
-    if message[1] in clients.keys():
-        socket.sendall("425".encode(FORMAT))
-        return
-
+    # checks if username contains special characters or numbers
     if not check_username_chars(message[1]):
         socket.sendall("426".encode(FORMAT))
         return
 
     signup_from_srv(socket, message[1])
-    socket.sendall("200".encode(FORMAT))
 
 
 def signup_from_srv(socket, username):
-    clients[username] = {'socket': socket,
-                         'state': 'chatting',
-                         'friends': [],
-                         'pending_friends': [],
-                         'pending_files': []}
+    # Creates a new user and appends it to clients list
+    clients.append(User(username, socket))
     broadcast(f"signupFromSrv|{username}")
+    socket.sendall("200".encode(FORMAT))
 
 
 def msg(socket, message):
@@ -101,11 +94,15 @@ def msg(socket, message):
     mess = ' '.join(message[1:])
     total = [command, mess]
 
+    # checks if command has the right number of parameters
     if len(total) != 2:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
@@ -113,322 +110,404 @@ def msg(socket, message):
         socket.sendall("403".encode(FORMAT))
         return
 
-    username = get_username_from_socket(socket)
-
-    if clients[username]['state'] == 'afk':
+    # checks if user's state is afk
+    if user.state == 'afk':
         socket.sendall("430".encode(FORMAT))
         return
 
-    if clients[username]['state'] == 'chatting':
-        msg_from_server(username, mess)
-        socket.sendall("200".encode(FORMAT))
+    msg_from_server(user.username, mess, socket)
 
 
-def msg_from_server(username, message):
+def msg_from_server(username, message, socket):
     broadcast(f"msgFromServer|{username}|{message}")
+    socket.sendall("200".encode(FORMAT))
 
 
 def exit(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 1:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    exit_from_server(socket)
-    socket.sendall("200".encode(FORMAT))
+    exit_from_server(user.username, user.socket)
 
 
-def exit_from_server(socket):
-    username = get_username_from_socket(socket)
-    local_sock = socket
-    del clients[username]
-    local_sock.close()
+def exit_from_server(username, socket):
+    remove_user(socket)
+    socket.close()
     broadcast(f"exitFromSrv|{username}")
+    socket.sendall("200".encode(FORMAT))
 
 
 def afk(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 1:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    if get_state_from_socket(socket) == 'afk':
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
         socket.sendall("415".encode(FORMAT))
         return
 
-    afk_from_server(socket)
-    socket.sendall("200".encode(FORMAT))
+    afk_from_server(user)
 
 
-def afk_from_server(socket):
-    username = get_username_from_socket(socket)
-    clients[username]['state'] = 'afk'
-    broadcast(f"afkFromSrv|{username}")
+def afk_from_server(user):
+    user.state = 'afk'
+    broadcast(f"afkFromSrv|{user.username}")
+    user.socket.sendall("200".encode(FORMAT))
 
 
 def btk(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 1:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    if get_state_from_socket(socket) == 'chatting':
+    # checks if user's state is 'chatting'
+    if user.state == 'chatting':
         socket.sendall("416".encode(FORMAT))
         return
 
-    btk_from_server(socket)
-    socket.sendall("200".encode(FORMAT))
+    btk_from_server(user)
 
 
-def btk_from_server(socket):
-    username = get_username_from_socket(socket)
-    clients[username]['state'] = 'chatting'
-    broadcast(f"btkFromSrv|{username}")
+def btk_from_server(user):
+    user.state = 'chatting'
+    broadcast(f"btkFromSrv|{user.username}")
+    user.socket.sendall("200".encode(FORMAT))
 
 
 def users(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 1:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    if get_state_from_socket(socket) == 'afk':
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
         socket.sendall("430".encode(FORMAT))
         return
 
     users_from_server(socket)
-    socket.sendall("200".encode(FORMAT))
 
 
 def users_from_server(socket):
     res = "usersFromSrv|["
-    for username in clients.keys():
-        res += f"{username}, "
+    for user in clients:
+        res += f"{user.username}, "
     res = res[:-2]
     res += "]"
     socket.sendall(res.encode(FORMAT))
+    socket.sendall("200".encode(FORMAT))
 
 
 def ping(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 2:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    if get_state_from_socket(socket) == 'afk':
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
         socket.sendall("430".encode(FORMAT))
         return
 
-    if message[1] not in clients.keys():
-        socket.sendall("406".encode(FORMAT))
+    # checks if username exists
+    # we create a new list of usernames and if the username given isn't in that list we send a code error
+    if message[1] not in [client.username for client in clients]:
+        socket.sendall("402".encode(FORMAT))
         return
 
-    targeted_socket = clients[message[1]]['socket']
+    targeted_socket = find_socket(message[1])
 
+    # checks if the username given in the parameter isn't the client himself
+    # alternatively we could check if user.username == message[1]
     if targeted_socket == socket:
         socket.sendall("407".encode(FORMAT))
         return
 
-    ping_from_server(socket, targeted_socket)
+    ping_from_server(socket, targeted_socket, user.username)
+
+
+def ping_from_server(socket, target_socket, username):
+    target_socket.sendall(f"pingFromSrv|{username}".encode(FORMAT))
     socket.sendall("200".encode(FORMAT))
 
 
-def ping_from_server(socket, target_socket):
-    username = get_username_from_socket(socket)
-    target_socket.sendall(f"pingFromSrv|{username}".encode(FORMAT))
-
-
 def rename(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 2:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    if get_state_from_socket(socket) == 'afk':
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
         socket.sendall("430".encode(FORMAT))
         return
 
-    if message[1] in clients.keys():
+    # checks if username exists
+    # we create a new list of usernames and if the username given is in that list we send a code error
+    if message[1] in [client.username for client in clients]:
         socket.sendall("425".encode(FORMAT))
         return
 
+    # checks if given username does not contain special characters nor numbers
     if not check_username_chars(message[1]):
         socket.sendall("426".encode(FORMAT))
         return
 
-    rename_from_server(socket, message[1])
+    rename_from_server(user, message[1], socket)
+
+
+def rename_from_server(user, new_username, socket):
+    old_username = user.username
+    user.username = new_username
+
+    for user in clients:
+        if old_username in user.friends:
+            user.remove_friends(old_username)
+            user.add_friends(new_username)
+
+        if old_username in user.pending_friends:
+            user.remove_pending_friends(old_username)
+            user.add_pending_friends(new_username)
+
+    broadcast(f"renameFromSrv|{old_username}|{new_username}")
     socket.sendall("200".encode(FORMAT))
-
-
-def rename_from_server(socket, new_username):
-    username = get_username_from_socket(socket)
-    friends = get_friends_from_socket(socket)
-    pending_friends = get_pending_friends_from_socket(socket)
-    pending_files = get_pending_files_from_socket(socket)
-    clients[new_username] = {'socket': socket,
-                             'state': 'chatting',
-                             'friends': friends,
-                             'pending_friends': pending_friends,
-                             'pending_files': pending_files}
-    del clients[username]
-    broadcast(f"renameFromSrv|{username}|{new_username}")
 
 
 def channel(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 2:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    if get_state_from_socket(socket) == 'afk':
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
         socket.sendall("430".encode(FORMAT))
         return
 
-    if message[1] not in clients.keys():
-        socket.sendall("406".encode(FORMAT))
+    # checks if username exists
+    # we create a new list of usernames and if the username given isn't in that list we send a code error
+    if message[1] not in [client.username for client in clients]:
+        socket.sendall("402".encode(FORMAT))
         return
 
-    targeted_socket = clients[message[1]]['socket']
+    targeted_user = find_user_by_username(message[1])
 
-    if targeted_socket == socket:
+    # checks if the username given in the parameter isn't the client himself
+    # alternatively we could check if user.username == message[1]
+    if targeted_user.socket == socket:
         socket.sendall("407".encode(FORMAT))
         return
 
-    username = get_username_from_socket(socket)
-    friends = get_friends_from_socket(socket)
-    targeted_friends = get_friends_from_socket(targeted_socket)
-
-    if message[1] in friends or username in targeted_friends:
-        socket.sendall("440".encode(FORMAT))
+    # checks if the user and targeted user already have a channel open
+    if message[1] in user.friends and user.username in targeted_user.friends:
+        socket.sendall("404".encode(FORMAT))
         return
 
-    channel_from_server(socket, targeted_socket, username, message[1], friends)
-    socket.sendall("200".encode(FORMAT))
+    # checks if the user has already sent a channel request to the targeted user
+    if user.username in targeted_user.pending_friends:
+        socket.sendall("441".encode(FORMAT))
+        return
+
+    channel_from_server(user, targeted_user)
 
 
-def channel_from_server(socket, target_socket, username, target_username, friends):
-    targeted_pending_friends = get_pending_friends_from_socket(target_socket)
-    targeted_pending_friends.append(username)
-    target_socket.sendall(f"channelFromSrv|{username}".encode(FORMAT))
+def channel_from_server(user, target_user):
+    target_user.add_pending_friends(user.username)
+    target_user.socket.sendall(f"channelFromSrv|{user.username}".encode(FORMAT))
+    user.socket.sendall("200".encode(FORMAT))
 
 
 def acceptchannel(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 2:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    if get_state_from_socket(socket) == 'afk':
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
         socket.sendall("430".encode(FORMAT))
         return
 
-    if message[1] not in clients.keys():
-        socket.sendall("406".encode(FORMAT))
+    # checks if username exists
+    # we create a new list of usernames and if the username given isn't in that list we send a code error
+    if message[1] not in [client.username for client in clients]:
+        socket.sendall("402".encode(FORMAT))
         return
 
-    targeted_socket = clients[message[1]]['socket']
+    targeted_user = find_user_by_username(message[1])
 
-    if targeted_socket == socket:
+    # checks if the username given in the parameter isn't the client himself
+    # alternatively we could check if user.username == message[1]
+    if targeted_user.socket == socket:
         socket.sendall("407".encode(FORMAT))
         return
 
-    pending_friends = get_pending_friends_from_socket(socket)
-    username = get_username_from_socket(socket)
-    targeted_pending_friends = get_pending_friends_from_socket(targeted_socket)
-
-    if len(pending_friends) == 0:
+    # checks if the user has any channel requests
+    if len(user.pending_friends) == 0:
         socket.sendall("440".encode(FORMAT))
         return
 
-    acceptchannel_from_server(socket, username, message[1], targeted_socket, targeted_pending_friends, pending_friends)
-    socket.sendall("200".encode(FORMAT))
+    acceptchannel_from_server(user, targeted_user)
 
 
-def acceptchannel_from_server(socket, username, target_username, target_socket, target_pending_friends, pending_friends):
-    try:
-        target_friends = get_friends_from_socket(target_socket)
-        friends = get_friends_from_socket(socket)
-        target_friends.append(username)
-        friends.append(target_username)
-        if username in target_pending_friends:
-            target_pending_friends.remove(username)
-        pending_friends.remove(target_username)
-        socket.sendall(f"acceptchannelFromSrv|{target_username}".encode(FORMAT))
-    except Exception as e:
-        print(e)
-        socket.sendall("500".encode(FORMAT))
-        target_socket.sendall("500".encode(FORMAT))
+def acceptchannel_from_server(user, target_user):
 
+    # checks if the targeted user is not in the user's friends list
+    # if he is not, add him to the friends list
+    if target_user.username not in user.friends:
+        user.add_friends(target_user.username)
+
+    # checks if the user is not in the targeted user's friends list
+    # if he is not, add him to the friends list
+    if user.username not in target_user.friends:
+        target_user.add_friends(user.username)
+
+    # checks if the user is in the targeted user's pending friends list
+    # if he is, remove him from the list
+    if user.username in target_user.pending_friends:
+        target_user.remove_pending_friends(user.username)
+
+    # checks if the target user is in the user's pendiung friends list
+    # if he is, remove him from the list
+    if target_user.username in user.pending_friends:
+        user.remove_pending_friends(target_user.username)
+
+    target_user.socket.sendall(f"acceptedchannelFromSrv|{user.username}".encode(FORMAT))
+    user.socket.sendall("200".encode(FORMAT))
 
 
 def declinechannel(socket, message):
+
+    # checks if command has the right number of parameters
     if len(message) != 2:
         socket.sendall("403".encode(FORMAT))
         return
 
-    if not is_user_connected(socket):
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
         socket.sendall("418".encode(FORMAT))
         return
 
-    if get_state_from_socket(socket) == 'afk':
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
         socket.sendall("430".encode(FORMAT))
         return
 
-    if message[1] not in clients.keys():
-        socket.sendall("406".encode(FORMAT))
+    # checks if username exists
+    # we create a new list of usernames and if the username given isn't in that list we send a code error
+    if message[1] not in [client.username for client in clients]:
+        socket.sendall("402".encode(FORMAT))
         return
 
-    targeted_socket = clients[message[1]]['socket']
+    targeted_user = find_user_by_username(message[1])
 
-    if targeted_socket == socket:
+    # checks if the username given in the parameter isn't the client himself
+    # alternatively we could check if user.username == message[1]
+    if targeted_user.socket == socket:
         socket.sendall("407".encode(FORMAT))
         return
 
-    pending_friends = get_pending_friends_from_socket(socket)
-    username = get_username_from_socket(socket)
-    targeted_pending_friends = get_pending_friends_from_socket(targeted_socket)
-
-    if len(pending_friends) == 0:
+    # checks if the user has any channel requests
+    if len(user.pending_friends) == 0:
         socket.sendall("440".encode(FORMAT))
         return
 
-    declinechannel_from_server(socket,targeted_socket, username, message[1], pending_friends, targeted_pending_friends)
+    declinechannel_from_server(user, targeted_user)
 
 
-def declinechannel_from_server(socket, target_socket, username, target_username, pending_friends, target_pending_friends):
-    try:
-        pending_friends.remove(target_username)
-        if username in target_pending_friends:
-            target_pending_friends.remove(username)
-        socket.sendall(f"declinechannelFromSrv|{target_username}".encode(FORMAT))
-    except Exception as e:
-        print(e)
-        socket.sendall("500".encode(FORMAT))
-        target_socket.sendall("500".encode(FORMAT))
+def declinechannel_from_server(user, target_user):
+
+    # checks if the user is in the pending friends list of the targeted user
+    # if he exists, remove him from the list
+    if user.username in target_user.pending_friends:
+        target_user.remove_pending_friends(user.username)
+
+    # checks if the targeted user is in the pending friends list of the user
+    # if he exists, remove him from the list
+    if target_user.username in user.pending_friends:
+        user.remove_pending_friends(target_user.username)
+
+    target_user.socket.sendall(f"declinedchannelFromSrv|{user.username}".encode(FORMAT))
+    user.socket.sendall("200".encode(FORMAT))
+
+
+def msgpv(socket, message):
+    pass
+
+
+def msgpv_from_server():
+    pass
 
 
 def sharefile(socket, message):
@@ -488,12 +567,15 @@ def process_client(client_socket):
                 acceptfile(client_socket, command)
             elif command[0] == "declinefile":
                 declinefile(client_socket, command)
+            elif command[0] == 'msgpv':
+                msgpv(client_socket, command)
             else:
                 client_socket.sendall("400".encode(FORMAT))
 
         except ConnectionResetError:
-            username = get_username_from_socket(client_socket)
-            del clients[username]
+            user = find_user_by_socket(client_socket)
+            username = user.username
+            remove_user(client_socket)
             client_socket.close()
             broadcast(f"exitFromSrv|{username}")
             break
@@ -505,8 +587,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     print("Server is now running.")
-    clients = {}
-    usernames = []
+    clients = []
 
     sock_locale = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock_locale.bind(("", int(sys.argv[1])))

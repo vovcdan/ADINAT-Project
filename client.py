@@ -13,9 +13,9 @@ def receive_message(client_socket):
             from_server = client_socket.recv(SIZE).decode(FORMAT)
             print(f"From Server: {from_server}")
             if from_server == "400":
-                print("This command does not exist")
+                print("This command does not exist.")
             if from_server == "401":
-                print("Message error")
+                print("Message error.")
             if from_server == "402":
                 print("Username given does not exist or is not logged in.")
             if from_server == "403":
@@ -24,26 +24,30 @@ def receive_message(client_socket):
                 print("Private channel already exists. You are already friends with that user.")
             if from_server == "405":
                 print("File name given does not exist.")
-            if from_server == "406":
-                print("Username given does not exist or is not logged in.")
             if from_server == "407":
                 print("You are not authorized to send that to yourself.")
             if from_server == "415":
-                print("You are already away from keyboard")
+                print("You are already away from keyboard.")
             if from_server == "416":
-                print("You are already chatting/back to keyboard")
+                print("You are already chatting/back to keyboard.")
             if from_server == "417":
-                print("You are already logged in")
+                print("You are already logged in.")
             if from_server == "418":
                 print("You must be logged in to input this command.")
+            if from_server == "421":
+                print("You must first demand a channel request from that user in order to private message him.")
             if from_server == "425":
-                print("Username is already taken, choose another")
+                print("Username is already taken, choose another.")
             if from_server == "426":
-                print("Username must not contain any special characters or numbers")
+                print("Username must not contain any special characters or numbers.")
             if from_server == "430":
                 print("You are away from keyboard.")
+            if from_server == "440":
+                print("You don't have any pending private channel requests.")
+            if from_server == "441":
+                print("You have already sent a private channel request to that user.")
             if from_server == "500":
-                print("Internal server error")
+                print("Internal server error.")
 
             if from_server.startswith("signup"):
                 message = from_server.split("|")
@@ -72,19 +76,19 @@ def receive_message(client_socket):
             if from_server.startswith("channel"):
                 message = from_server.split("|")
                 print(f"{message[1]} requests a private channel with you. Do you accept?")
-            if from_server.startswith("acceptchannel"):
+            if from_server.startswith("acceptedchannel"):
                 message = from_server.split("|")
-                print(f"{message[1]} has accepted your request. You can now DM {message[1]}")
-            if from_server.startswith("declinechannel"):
+                print(f"{message[1]} has accepted your private channel request. You can now DM {message[1]}")
+            if from_server.startswith("declinedchannel"):
                 message = from_server.split("|")
-                print(f"{message[1]} has declined your request.")
+                print(f"{message[1]} has declined your private channel request.")
             if from_server.startswith("sharefile"):
                 message = from_server.split("|")
                 print(f"{message[2]} requests to share the file {message[3]} with you. Do you accept?")
-            if from_server.startswith("acceptsharefile"):
+            if from_server.startswith("acceptedsharefile"):
                 message = from_server.split("|")
                 print(f"{message[1]} accepted your transfer for file {message[2]}. Transferring...")
-            if from_server.startswith("declinesharefile"):
+            if from_server.startswith("declinedsharefile"):
                 message = from_server.split("|")
                 print(f"{message[1]} declined your transfer for file {message[2]}.")
             if from_server.startswith("exitFromSrv"):
