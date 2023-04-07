@@ -323,12 +323,14 @@ def channel(socket, message):
         socket.sendall("440".encode(FORMAT))
         return
 
-    channel_from_server(socket, targeted_socket, username, message[1], friends, targeted_friends)
+    channel_from_server(socket, targeted_socket, username, message[1], friends)
     socket.sendall("200".encode(FORMAT))
 
 
-def channel_from_server(socket, target_socket, username, target_username, friends, targeted_friends):
-    target_socket.sendall(f"channelFromSrv|{username}|")
+def channel_from_server(socket, target_socket, username, target_username, friends):
+    targeted_pending_friends = get_pending_friends_from_socket(target_socket)
+    targeted_pending_friends.append(username)
+    target_socket.sendall(f"channelFromSrv|{username}".encode(FORMAT))
 
 
 def acceptchannel(socket, message):
@@ -354,9 +356,33 @@ def acceptchannel(socket, message):
         socket.sendall("407".encode(FORMAT))
         return
 
+    pending_friends = get_pending_friends_from_socket(socket)
+    username = get_username_from_socket(socket)
+    targeted_pending_friends = get_pending_friends_from_socket(targeted_socket)
 
-def acceptchannel_from_server(socket):
-    pass
+    if len(pending_friends) == 0:
+        socket.sendall("440".encode(FORMAT))
+        return
+
+    acceptchannel_from_server(socket, username, message[1], targeted_socket, targeted_pending_friends, pending_friends)
+    socket.sendall("200".encode(FORMAT))
+
+
+def acceptchannel_from_server(socket, username, target_username, target_socket, target_pending_friends, pending_friends):
+    try:
+        target_friends = get_friends_from_socket(target_socket)
+        friends = get_friends_from_socket(socket)
+        target_friends.append(username)
+        friends.append(target_username)
+        if username in target_pending_friends:
+            target_pending_friends.remove(username)
+        pending_friends.remove(target_username)
+        socket.sendall(f"acceptchannelFromSrv|{target_username}".encode(FORMAT))
+    except Exception as e:
+        print(e)
+        socket.sendall("500".encode(FORMAT))
+        target_socket.sendall("500".encode(FORMAT))
+
 
 
 def declinechannel(socket, message):
@@ -382,9 +408,27 @@ def declinechannel(socket, message):
         socket.sendall("407".encode(FORMAT))
         return
 
+    pending_friends = get_pending_friends_from_socket(socket)
+    username = get_username_from_socket(socket)
+    targeted_pending_friends = get_pending_friends_from_socket(targeted_socket)
 
-def declinechannel_from_server(socket):
-    pass
+    if len(pending_friends) == 0:
+        socket.sendall("440".encode(FORMAT))
+        return
+
+    declinechannel_from_server(socket,targeted_socket, username, message[1], pending_friends, targeted_pending_friends)
+
+
+def declinechannel_from_server(socket, target_socket, username, target_username, pending_friends, target_pending_friends):
+    try:
+        pending_friends.remove(target_username)
+        if username in target_pending_friends:
+            target_pending_friends.remove(username)
+        socket.sendall(f"declinechannelFromSrv|{target_username}".encode(FORMAT))
+    except Exception as e:
+        print(e)
+        socket.sendall("500".encode(FORMAT))
+        target_socket.sendall("500".encode(FORMAT))
 
 
 def sharefile(socket, message):
