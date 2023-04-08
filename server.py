@@ -1,9 +1,10 @@
+import os
 from datetime import datetime
 import socket
 import sys
 import threading
+import signal
 import re
-import atexit
 import yaml
 from user import User
 
@@ -48,7 +49,7 @@ def on_exit():
     write_to_log(f"Server has stopped.".upper())
 
 
-atexit.register(on_exit)
+signal.signal(signal.SIGTERM, on_exit)
 
 
 def broadcast(message):
@@ -590,30 +591,159 @@ def msgpv_from_server(socket, username, target_socket, message):
 
 
 def sharefile(socket, message):
-    pass
+    # checks if command has the right number of parameters
+    if len(message) != 4:
+        unicast("403", socket)
+        return
+
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
+        unicast("418", socket)
+        return
+
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
+        unicast("430", socket)
+        return
+
+    # checks if username exists
+    # we create a new list of usernames and if the username given isn't in that list we send a code error
+    if message[1] not in [client.username for client in clients]:
+        unicast("402", socket)
+        return
+
+    if not os.path.isfile(message[2]):
+        unicast("405", socket)
+        return
+
+    targeted_user = find_user_by_username(message[1])
+
+    file = message[2]
+    port = message[3]
+    if "\\" in message[2]:
+        file = message[2].split("\\")
+        file = file[-1]
+    elif "/" in message[2]:
+        file = message[2].split("/")
+        file = file[-1]
+
+    username_and_file = (user.username, file)
+
+    if username_and_file in targeted_user.pending_files:
+        unicast("442", socket)
+        return
+
+    sharefile_from_server(user, file, targeted_user, port)
 
 
-def sharefile_from_server(socket):
-    pass
+def sharefile_from_server(user, file, target_user, port):
+    try:
+        target_user.add_pending_files((user.username, file))
+        unicast(f"sharefileFromSrv|{user.username}|{file}|{user.socket.getsockname()[0]}|{port}", target_user.socket)
+        unicast("200", user.socket)
+    except socket.error:
+        unicast("500", user.socket)
 
 
 def acceptfile(socket, message):
-    pass
+
+    # checks if command has the right number of parameters
+    if len(message) != 3:
+        unicast("403", socket)
+        return
+
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
+        unicast("418", socket)
+        return
+
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
+        unicast("430", socket)
+        return
+
+    # checks if username exists
+    # we create a new list of usernames and if the username given isn't in that list we send a code error
+    if message[1] not in [client.username for client in clients]:
+        unicast("402", socket)
+        return
+
+    if len(user.pending_files) == 0:
+        unicast("443", socket)
+        return
+
+    targeted_user = find_user_by_username(message[1])
+
+    target_username_and_file = (message[1], message[2])
+
+    if target_username_and_file not in user.pending_files:
+        unicast("406", socket)
+        return
+
+    acceptfile_from_server(socket, targeted_user.socket, user.username)
 
 
-def acceptfile_from_server(socket):
-    pass
+def acceptfile_from_server(socket, target_socket, username):
+    try:
+        unicast(f"acceptedfileFromSrv|{username}", target_socket)
+        unicast("200", socket)
+    except socket.error:
+        unicast("500", socket)
 
 
 def declinefile(socket, message):
-    pass
+
+    # checks if command has the right number of parameters
+    if len(message) != 3:
+        unicast("403", socket)
+        return
+
+    user = find_user_by_socket(socket)
+
+    # checks if user is connected
+    if user not in clients:
+        unicast("418", socket)
+        return
+
+    # checks if user's state is 'afk'
+    if user.state == 'afk':
+        unicast("430", socket)
+        return
+
+    # checks if username exists
+    # we create a new list of usernames and if the username given isn't in that list we send a code error
+    if message[1] not in [client.username for client in clients]:
+        unicast("402", socket)
+        return
+
+    if len(user.pending_files) == 0:
+        unicast("443", socket)
+        return
+
+    targeted_user = find_user_by_username(message[1])
+
+    target_username_and_file = (message[1], message[2])
+
+    if target_username_and_file not in user.pending_files:
+        unicast("406", socket)
+        return
+
+    declinefile_from_server(user, targeted_user, message[2])
 
 
-def declinefile_from_server():
-    pass
+def declinefile_from_server(user, target_user, file):
+    try:
+        unicast(f"declinedfileFromSrv|{user.username}|{file}", target_user.socket)
+        unicast("200", user.socket)
+    except socket.error:
+        unicast("500", user.socket)
 
 
-def help(socket, message):
+def help_command(socket, message):
     # checks if command has the right number of parameters
     if len(message) != 1:
         unicast("403", socket)
@@ -634,7 +764,7 @@ def process_client(client_socket, client_adress):
             if command[0] == "signup":
                 signup(client_socket, command)
             elif command[0] == "help":
-                help(client_socket, command)
+                help_command(client_socket, command)
             elif command[0] == "msg":
                 msg(client_socket, command)
             elif command[0] == "exit":  # NOT WORKING AS INTENDED

@@ -8,6 +8,15 @@ SIZE = 1024
 FORMAT = 'utf-8'
 stop_thread = False
 COMMAND = ''
+TARGET_HOST = ''
+TARGET_PORT = 0
+
+
+def get_target_address(host, port):
+    global TARGET_HOST
+    TARGET_HOST = host
+    global TARGET_PORT
+    TARGET_PORT = int(port)
 
 
 def read_from_config():
@@ -33,6 +42,8 @@ def return_error_message(error_code):
         print(f"Private channel with user '{COMMAND[1]}' already exists.")
     if error_code == "405":
         print(f"File '{COMMAND[2]}' does not exist.")
+    if error_code == "406":
+        print(f"The file name {COMMAND[2]} isn't corresponding with the file name given by user '{COMMAND[1]}'.")
     if error_code == "407":
         print(f"You are not authorized to issue the command '{COMMAND[0]}' to yourself.")
     if error_code == "415":
@@ -56,6 +67,8 @@ def return_error_message(error_code):
         print("You don't have any pending private channel requests.")
     if error_code == "441":
         print(f"You already issued a private channel request to user '{COMMAND[1]}'.")
+    if error_code == "442":
+        print(f"You have already issued a file transfer request with the file '{COMMAND[2]}' to user '{COMMAND[1]}'")
     if error_code == "500":
         print("Internal server error.")
 
@@ -69,6 +82,14 @@ def return_passing_messages():
         print(f"You sent a share file request to {COMMAND[1]}.")
     if COMMAND[0] == "acceptchannel":
         print(f"You accepted {COMMAND[1]}'s  private channel request. You can now DM {COMMAND[1]}.")
+    if COMMAND[0] == "declinefile":
+        print(f"You declined {COMMAND[1]}'s share file request for the file '{COMMAND[2]}'")
+    if COMMAND[0] == "acceptfile":
+        print(f"You accepted {COMMAND[1]}'s share file request for the file '{COMMAND[2]}'")
+    if COMMAND[0] == "ping":
+        print(f"You successfully pinged {COMMAND[1]}.")
+    if COMMAND[0] == "rename":
+        print(f"You successfully changed your name to {COMMAND[1]}.")
     if COMMAND[0] == "help":
         print('signup USERNAME: Sign up and log in to login to the chatroom.\nmsg MESSAGE: Send a '
               'message in the chatroom.\nmsgpv USERNAME MESSAGE : Send a message to a specific user.'
@@ -112,10 +133,11 @@ def return_messages_with_data(message):
     if message[0].startswith("declinedchannel"):
         print(f"{message[1]} has declined your private channel request.")
     if message[0].startswith("sharefile"):
-        print(f"{message[2]} requests to share the file {message[3]} with you. Do you accept?")
-    if message[0].startswith("acceptedsharefile"):
+        print(f"{message[1]} requests to share the file {message[2]} with you on port {message[4]}. Do you accept?")
+        get_target_address(message[3], message[4])
+    if message[0].startswith("acceptedfile"):
         print(f"{message[1]} accepted your transfer for file {message[2]}. Transferring...")
-    if message[0].startswith("declinedsharefile"):
+    if message[0].startswith("declinedfile"):
         print(f"{message[1]} declined your transfer for file {message[2]}.")
 
 
