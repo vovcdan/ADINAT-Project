@@ -737,6 +737,7 @@ def declinefile(socket, message):
 
 def declinefile_from_server(user, target_user, file):
     try:
+        user.remove_pending_files((target_user.username, file))
         unicast(f"declinedfileFromSrv|{user.username}|{file}", target_user.socket)
         unicast("200", user.socket)
     except socket.error:
