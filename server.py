@@ -4,9 +4,13 @@ import sys
 import threading
 import re
 import atexit
+import yaml
 from user import User
 
 global clients
+LOG_FILE = ''
+HOST = ''
+PORT = 0
 FORMAT = 'utf-8'
 SIZE = 1024
 can_write = True
@@ -14,13 +18,26 @@ mutex = threading.Lock()
 writing_condition = threading.Condition(mutex)
 
 
+def read_from_config():
+    with open('adinat_config.yaml', 'r') as config_file:
+        config = yaml.load(config_file, Loader=yaml.FullLoader)
+
+    global HOST
+    HOST = config['server']['host']
+    global PORT
+    PORT = config['server']['port']
+    global LOG_FILE
+    LOG_FILE = config['log']['file']
+
+
 def write_to_log(data):
     global can_write
+    global LOG_FILE
     with mutex:
         writing_condition.wait_for(lambda: can_write)
         can_write = False
-        with open('server.log', 'a') as log_file:
-            log_file.write(f"[{datetime.now()}] {data}\n")
+        with open(LOG_FILE, 'a') as file:
+            file.write(f"[{datetime.now()}] {data}\n")
 
     with mutex:
         can_write = True
@@ -659,17 +676,19 @@ def process_client(client_socket, client_adress):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <port>", file=sys.stderr)
+    if len(sys.argv) != 1:
+        print(f"Usage: {sys.argv[0]}", file=sys.stderr)
         sys.exit(1)
 
     print("Server is now running.")
     clients = []
 
+    read_from_config()
+
     sock_locale = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock_locale.bind(("", int(sys.argv[1])))
-    sock_locale.listen(4)
-    write_to_log(f"Server has started. Listening on port '{sys.argv[1]}'".upper())
+    sock_locale.bind((HOST, int(PORT)))
+    sock_locale.listen()
+    write_to_log(f"Server has started. Listening on port '{PORT}'".upper())
     while True:
         try:
             sock_client, adr_client = sock_locale.accept()

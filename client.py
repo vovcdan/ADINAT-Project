@@ -1,13 +1,23 @@
 import socket
-import sys
+import yaml
 import threading
 
-HOST = '127.0.0.1'
-PORT = 8888
+HOST = ''
+PORT = 0
 SIZE = 1024
 FORMAT = 'utf-8'
 stop_thread = False
-COMMAND = None
+COMMAND = ''
+
+
+def read_from_config():
+    with open('adinat_config.yaml', 'r') as config_file:
+        config = yaml.load(config_file, Loader=yaml.FullLoader)
+
+    global HOST
+    HOST = config['client']['host']
+    global PORT
+    PORT = config['client']['port']
 
 
 def return_error_message(error_code):
@@ -151,11 +161,16 @@ def send_message(client_socket):
 
 
 if __name__ == '__main__':
-    socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket.connect((HOST, PORT))
+    try:
+        read_from_config()
 
-    print("Connected to the server! Type 'signup <username>' to join the chatroom.")
+        socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket.connect((HOST, int(PORT)))
 
-    threading.Thread(target=receive_message, args=(socket, )).start()
-    threading.Thread(target=send_message, args=(socket, )).start()
+        print("Connected to the server! Type 'signup <username>' to join the chatroom.")
+
+        threading.Thread(target=receive_message, args=(socket, )).start()
+        threading.Thread(target=send_message, args=(socket, )).start()
+    except KeyboardInterrupt:
+        print("Closing...")
 
