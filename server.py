@@ -10,8 +10,8 @@ from user import User
 
 global clients
 LOG_FILE = ''
-HOST = ''
-PORT = 0
+SERVER_HOST = ''
+SERVER_PORT = 0
 FORMAT = 'utf-8'
 SIZE = 1024
 can_write = True
@@ -23,10 +23,10 @@ def read_from_config():
     with open('adinat_config.yaml', 'r') as config_file:
         config = yaml.load(config_file, Loader=yaml.FullLoader)
 
-    global HOST
-    HOST = config['server']['host']
-    global PORT
-    PORT = config['server']['port']
+    global SERVER_HOST
+    SERVER_HOST = config['server']['host']
+    global SERVER_PORT
+    SERVER_PORT = config['server']['port']
     global LOG_FILE
     LOG_FILE = config['log']['file']
 
@@ -582,15 +582,16 @@ def msgpv(socket, message):
         unicast("402", socket)
         return
 
-    if target_username not in user.friends:
-        unicast("421", socket)
-        return
-
     targeted_user = find_user_by_username(target_username)
 
     if targeted_user.socket == socket:
         unicast("407", socket)
         return
+
+    if target_username not in user.friends:
+        unicast("421", socket)
+        return
+
 
     msgpv_from_server(socket, user.username, targeted_user.socket, mess)
 
@@ -660,7 +661,7 @@ def sharefile(socket, message):
 def sharefile_from_server(user, file, target_user, port, file_size):
     try:
         target_user.add_pending_files((user.username, file))
-        unicast(f"sharefileFromSrv|{user.username}|{file}|{file_size}|{port}", target_user.socket)
+        unicast(f"sharefileFromSrv|{user.username}|{file}|{file_size}|{user.socket.getsockname()[0]}|{port}", target_user.socket)
         unicast("200", user.socket)
     except socket.error:
         unicast("500", user.socket)
@@ -713,7 +714,7 @@ def acceptfile(socket, message):
 def acceptfile_from_server(socket, target_socket, user, target_username_and_file):
     try:
         user.remove_pending_files(target_username_and_file)
-        unicast(f"acceptedfileFromSrv|{user.username}|{user.socket.getsockname()[0]}", target_socket)
+        unicast(f"acceptedfileFromSrv|{user.username}|{target_username_and_file[1]}", target_socket)
         unicast("200", socket)
     except socket.error:
         unicast("500", socket)
@@ -841,9 +842,9 @@ if __name__ == '__main__':
     read_from_config()
 
     sock_locale = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock_locale.bind((HOST, int(PORT)))
+    sock_locale.bind((SERVER_HOST, int(SERVER_PORT)))
     sock_locale.listen()
-    write_to_log(f"Server has started. Listening on port '{PORT}'".upper())
+    write_to_log(f"Server has started. Listening on port '{SERVER_PORT}'".upper())
     while True:
         try:
             sock_client, adr_client = sock_locale.accept()

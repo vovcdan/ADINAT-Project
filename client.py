@@ -1,53 +1,82 @@
-import socket
+import socket as s
 import yaml
 import threading
 
-HOST = ''
-PORT = 0
-SIZE = 1024
+SERVER_HOST = ''
+SERVER_PORT = 0
+BUFFER_SIZE = 1024
 FORMAT = 'utf-8'
 stop_thread = False
-COMMAND = ''
-TARGET_HOST = ''
-TARGET_PORT = 0
-DOWNLOADS = ''
+INPUT_COMMAND = ''
+DOWNLOADS_PATH = ''
+global SENDER_HOST
+global COMMON_PORT
+FILE_PATH = ''
+global socket
 
 
-def get_target_port(port):
-    global TARGET_PORT
-    TARGET_PORT = int(port)
+def send_file(path, sender_host, port):
+    server_socket = s.socket(s.AF_INET, s.SOCK_STREAM)
+    server_socket.bind((sender_host, int(port)))
+    server_socket.listen(1)
+
+    client_socket, client_address = server_socket.accept()
+
+    with open(path, 'rb') as file:
+        data = file.read(1024)
+        while data:
+            client_socket.send(data)
+            data = file.read(1024)
+
+    client_socket.close()
+    server_socket.close()
+
+
+def receive_file(filename, port, sender_host):
+    client_socket = s.socket(s.AF_INET, s.SOCK_STREAM)
+    client_socket.connect((sender_host, int(port)))
+
+    filepath = DOWNLOADS_PATH + filename
+
+    with open(filepath, 'wb') as file:
+        data = client_socket.recv(1024)
+        while data:
+            file.write(data)
+            data = client_socket.recv(1024)
+
+    client_socket.close()
 
 
 def read_from_config():
     with open('adinat_config.yaml', 'r') as config_file:
         config = yaml.load(config_file, Loader=yaml.FullLoader)
 
-    global HOST
-    HOST = config['client']['host']
-    global PORT
-    PORT = config['client']['port']
-    global DOWNLOADS
-    DOWNLOADS = config['client']['downloads']
+    global SERVER_HOST
+    SERVER_HOST = config['client']['host']
+    global SERVER_PORT
+    SERVER_PORT = config['client']['port']
+    global DOWNLOADS_PATH
+    DOWNLOADS_PATH = config['client']['downloads']
 
 
 def return_error_message(error_code):
     res = None
     if error_code == "400":
-        res = f"The command '{COMMAND[0]}' does not exist."
+        res = f"The command '{INPUT_COMMAND[0]}' does not exist."
     if error_code == "401":
         res = "Message error."
     if error_code == "402":
-        res = f"Username '{COMMAND[1]}' does not exist or is not logged in."
+        res = f"Username '{INPUT_COMMAND[1]}' does not exist or is not logged in."
     if error_code == "403":
         res = "Wrong number of parameters."
     if error_code == "404":
-        res = f"Private channel with user '{COMMAND[1]}' already exists."
+        res = f"Private channel with user '{INPUT_COMMAND[1]}' already exists."
     if error_code == "405":
-        res = f"File '{COMMAND[2]}' does not exist."
+        res = f"File '{INPUT_COMMAND[2]}' does not exist."
     if error_code == "406":
-        res = f"The file name {COMMAND[2]} isn't corresponding with the file name given by user '{COMMAND[1]}'."
+        res = f"The file name {INPUT_COMMAND[2]} isn't corresponding with the file name given by user '{INPUT_COMMAND[1]}'."
     if error_code == "407":
-        res = f"You are not authorized to issue the command '{COMMAND[0]}' to yourself."
+        res = f"You are not authorized to issue the command '{INPUT_COMMAND[0]}' to yourself."
     if error_code == "415":
         res = "You are already away from keyboard."
     if error_code == "416":
@@ -55,12 +84,11 @@ def return_error_message(error_code):
     if error_code == "417":
         res = "You are already logged in."
     if error_code == "418":
-        res = f"You must be logged in to input the command '{COMMAND[0]}'."
+        res = f"You must be logged in to input the command '{INPUT_COMMAND[0]}'."
     if error_code == "421":
-        res = f"You must first issue a private channel request from user '{COMMAND[1]}' in order to private message him."
+        res = f"You must first issue a private channel request from user '{INPUT_COMMAND[1]}' in order to private message him."
     if error_code == "425":
-        res = f"Username '{COMMAND[1]}' is already taken by another user. Input the command 'signup USERNAME' once " \
-              f"again with another username. "
+        res = f"Username '{INPUT_COMMAND[1]}' is already taken by another user. Input the command 'signup USERNAME' once again with another username. "
     if error_code == "426":
         res = "Username must not contain any special characters or numbers."
     if error_code == "430":
@@ -68,9 +96,9 @@ def return_error_message(error_code):
     if error_code == "440":
         res = "You don't have any pending private channel requests."
     if error_code == "441":
-        res = f"You already issued a private channel request to user '{COMMAND[1]}'."
+        res = f"You already issued a private channel request to user '{INPUT_COMMAND[1]}'."
     if error_code == "442":
-        res = f"You have already issued a file transfer request with the file '{COMMAND[2]}' to user '{COMMAND[1]}'"
+        res = f"You have already issued a file transfer request with the file '{INPUT_COMMAND[2]}' to user '{INPUT_COMMAND[1]}'"
     if error_code == "500":
         res = "Internal server error."
     return res
@@ -78,25 +106,30 @@ def return_error_message(error_code):
 
 def return_passing_messages():
     res = None
-    if COMMAND[0] == "channel":
-        res = f"You sent a private channel request to {COMMAND[1]}."
-    if COMMAND[0] == "declinechannel":
-        res = f"You declined {COMMAND[1]}'s  private channel request."
-    if COMMAND[0] == "sharefile":
-        res = f"You sent a share file request to {COMMAND[1]}."
-        get_target_port(COMMAND[3])
-    if COMMAND[0] == "acceptchannel":
-        res = f"You accepted {COMMAND[1]}'s  private channel request. You can now DM {COMMAND[1]}."
-    if COMMAND[0] == "declinefile":
-        res = f"You declined {COMMAND[1]}'s share file request for the file '{COMMAND[2]}'"
-    if COMMAND[0] == "acceptfile":
-        res = f"You accepted {COMMAND[1]}'s share file request for the file '{COMMAND[2]}'"
-    if COMMAND[0] == "ping":
-        print(f"You successfully pinged {COMMAND[1]}.")
-        res = f"You successfully pinged {COMMAND[1]}."
-    if COMMAND[0] == "rename":
-        res = f"You successfully changed your name to {COMMAND[1]}."
-    if COMMAND[0] == "help":
+    if INPUT_COMMAND[0] == "channel":
+        res = f"You sent a private channel request to {INPUT_COMMAND[1]}."
+    if INPUT_COMMAND[0] == "declinechannel":
+        res = f"You declined {INPUT_COMMAND[1]}'s  private channel request."
+    if INPUT_COMMAND[0] == "sharefile":
+        res = f"You sent a share file request to {INPUT_COMMAND[1]}."
+        global FILE_PATH, COMMON_PORT, SENDER_HOST
+        FILE_PATH = INPUT_COMMAND[2]
+        COMMON_PORT = INPUT_COMMAND[3]
+        SENDER_HOST = socket.getsockname()[0]
+    if INPUT_COMMAND[0] == "acceptchannel":
+        res = f"You accepted {INPUT_COMMAND[1]}'s  private channel request. You can now DM {INPUT_COMMAND[1]}."
+    if INPUT_COMMAND[0] == "declinefile":
+        res = f"You declined {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'"
+    if INPUT_COMMAND[0] == "acceptfile":
+        res = f"You accepted {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'"
+        receive_file_thread = threading.Thread(target=receive_file, args=(INPUT_COMMAND[2], COMMON_PORT, SENDER_HOST, ))
+        receive_file_thread.start()
+        receive_file_thread.join()
+    if INPUT_COMMAND[0] == "ping":
+        res = f"You successfully pinged {INPUT_COMMAND[1]}."
+    if INPUT_COMMAND[0] == "rename":
+        res = f"You successfully changed your name to {INPUT_COMMAND[1]}."
+    if INPUT_COMMAND[0] == "help":
         res = "signup USERNAME: Sign up and log in to login to the chatroom.\nmsg MESSAGE: Send a message in the " \
               "chatroom.\nmsgpv USERNAME MESSAGE : Send a message to a specific user.\nexit: Leave the server.\nafk : " \
               "Enter afk mode to prevent from sending messages. Note - In this mode, it is possible to only use the " \
@@ -138,10 +171,15 @@ def return_messages_with_data(message):
     if message[0].startswith("declinedchannel"):
         res = f"{message[1]} has declined your private channel request."
     if message[0].startswith("sharefile"):
-        res = f"{message[1]} requests to share the file '{message[2]}' [{message[3]}] with you on port {message[4]}. Do you accept?"
-        get_target_port(message[4])
+        res = f"{message[1]} requests to share the file '{message[2]}' [{message[3]}] with you on port {message[5]}. Do you accept? "
+        global SENDER_HOST, COMMON_PORT
+        SENDER_HOST = message[4]
+        COMMON_PORT = message[5]
     if message[0].startswith("acceptedfile"):
         res = f"{message[1]} accepted your transfer for file {message[2]}. Transferring..."
+        send_file_thread = threading.Thread(target=send_file, args=(FILE_PATH, SENDER_HOST, COMMON_PORT,))
+        send_file_thread.start()
+        send_file_thread.join()
     if message[0].startswith("declinedfile"):
         res = f"{message[1]} declined your transfer for file {message[2]}."
     return res
@@ -152,11 +190,11 @@ def receive_message(client_socket):
         if stop_thread:
             break
         try:
-            from_server = client_socket.recv(SIZE).decode(FORMAT)
+            from_server = client_socket.recv(BUFFER_SIZE).decode(FORMAT)
             print(f"From Server: {from_server}")
-            global COMMAND
-            if not isinstance(COMMAND, list):
-                COMMAND = COMMAND.split()
+            global INPUT_COMMAND
+            if not isinstance(INPUT_COMMAND, list):
+                INPUT_COMMAND = INPUT_COMMAND.split()
 
             if from_server != "200":
                 error_message = return_error_message(from_server)
@@ -179,16 +217,16 @@ def receive_message(client_socket):
 
 
 def send_message(client_socket):
-    global COMMAND
+    global INPUT_COMMAND
     global stop_thread
     while True:
         if stop_thread:
             break
         try:
-            COMMAND = input().lower()
-            if COMMAND == "exit":
+            INPUT_COMMAND = input()
+            if INPUT_COMMAND.lower() == "exit":
                 stop_thread = True
-            client_socket.sendall(COMMAND.encode(FORMAT))
+            client_socket.sendall(INPUT_COMMAND.lower().encode(FORMAT))
         except ConnectionResetError or ConnectionAbortedError:
             print("\nDisconnected from the server.")
             break
@@ -198,13 +236,15 @@ if __name__ == '__main__':
     try:
         read_from_config()
 
-        socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        socket.connect((HOST, int(PORT)))
+        socket = s.socket(s.AF_INET, s.SOCK_STREAM)
+        print(SERVER_HOST)
+        print(SERVER_PORT)
+        socket.connect((SERVER_HOST, int(SERVER_PORT)))
 
         print("Connected to the server! Type 'signup <username>' to join the chatroom.")
 
-        threading.Thread(target=receive_message, args=(socket, )).start()
-        threading.Thread(target=send_message, args=(socket, )).start()
+        threading.Thread(target=receive_message, args=(socket,)).start()
+        threading.Thread(target=send_message, args=(socket,)).start()
     except KeyboardInterrupt:
         print("Closing...")
 
