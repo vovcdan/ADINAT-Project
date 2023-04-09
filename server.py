@@ -1340,6 +1340,7 @@ def process_client(client_socket, client_address):
             write_to_log(f"SUDDEN DISCONNECT FROM {str(adr_client)}")
             client_socket.close()
             broadcast(f"exitFromSrv|{username}")
+            print(f"Client {str(client_address)} disconnected.")
             break
 
 
@@ -1360,7 +1361,7 @@ if __name__ == '__main__':
     while True:
         try:
             sock_client, adr_client = sock_locale.accept()
-            print(f"Client{str(adr_client)} connected")
+            print(f"Client {str(adr_client)} connected.")
             threading.Thread(target=process_client, args=(sock_client, adr_client, )).start()
 
         except KeyboardInterrupt:

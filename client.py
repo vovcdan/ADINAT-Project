@@ -101,7 +101,7 @@ def return_error_message(error_code):
     if error_code == "405":
         res = f"File '{INPUT_COMMAND[2]}' does not exist."
     if error_code == "406":
-        res = f"The file name {INPUT_COMMAND[2]} isn't corresponding with the file name given by user '{INPUT_COMMAND[1]}'."
+        res = f"The file name '{INPUT_COMMAND[2]}' isn't corresponding with the file name given by user '{INPUT_COMMAND[1]}'."
     if error_code == "407":
         res = f"You are not authorized to issue the command '{INPUT_COMMAND[0]}' to yourself."
     if error_code == "415":
@@ -113,7 +113,7 @@ def return_error_message(error_code):
     if error_code == "418":
         res = f"You must be logged in to input the command '{INPUT_COMMAND[0]}'."
     if error_code == "421":
-        res = f"You must first issue a private channel request from user '{INPUT_COMMAND[1]}' in order to private message him."
+        res = f"You must first issue a private channel request from '{INPUT_COMMAND[1]}' in order to private message him."
     if error_code == "425":
         res = f"Username '{INPUT_COMMAND[1]}' is already taken by another user. Input the command 'signup USERNAME' once again with another username. "
     if error_code == "426":
@@ -123,15 +123,17 @@ def return_error_message(error_code):
     if error_code == "440":
         res = "You don't have any pending private channel requests."
     if error_code == "441":
-        res = f"You already issued a private channel request to user '{INPUT_COMMAND[1]}'."
+        res = f"You already issued a private channel request to {INPUT_COMMAND[1]}."
     if error_code == "442":
-        res = f"You have already issued a file transfer request with the file '{INPUT_COMMAND[2]}' to user '{INPUT_COMMAND[1]}'"
+        res = f"You have already issued a file transfer request with the file '{INPUT_COMMAND[2]}' to {INPUT_COMMAND[1]}."
     if error_code == "443":
         res = f"You don't have any pending file share requests."
     if error_code == "444":
-        res = f"You have no pending private channel request from user {INPUT_COMMAND[1]}"
+        res = f"You have no pending private channel request from {INPUT_COMMAND[1]}."
     if error_code == "445":
-        res = f"You have no pending share file request from user {INPUT_COMMAND[1]}"
+        res = f"You have no pending share file request from {INPUT_COMMAND[1]}."
+    if error_code == "446":
+        res = f"Port number '{INPUT_COMMAND[1]}' is not valid."
     if error_code == "500":
         res = "Internal server error."
     return res
