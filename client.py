@@ -11,6 +11,11 @@ INPUT_COMMAND = ''
 DOWNLOADS_PATH = ''
 global SENDER_HOST
 global COMMON_PORT
+pending_files = {}
+is_transfer_complete = False
+can_say_transfer_complete = True
+transfer_mutex = threading.Lock()
+can_say_transfer_condition = threading.Condition(transfer_mutex)
 FILE_PATH = ''
 global socket
 
@@ -28,6 +33,17 @@ def send_file(path, sender_host, port):
             client_socket.send(data)
             data = file.read(1024)
 
+    with transfer_mutex:
+        global can_say_transfer_complete
+        can_say_transfer_condition.wait_for(lambda: can_say_transfer_complete)
+        can_say_transfer_complete = False
+        global is_transfer_complete
+        is_transfer_complete = True
+
+    with transfer_mutex:
+        can_say_transfer_complete = True
+        can_say_transfer_condition.notify_all()
+
     client_socket.close()
     server_socket.close()
 
@@ -43,6 +59,17 @@ def receive_file(filename, port, sender_host):
         while data:
             file.write(data)
             data = client_socket.recv(1024)
+
+    with transfer_mutex:
+        global can_say_transfer_complete
+        can_say_transfer_condition.wait_for(lambda: can_say_transfer_complete)
+        can_say_transfer_complete = False
+        global is_transfer_complete
+        is_transfer_complete = True
+
+    with transfer_mutex:
+        can_say_transfer_complete = True
+        can_say_transfer_condition.notify_all()
 
     client_socket.close()
 
@@ -99,6 +126,12 @@ def return_error_message(error_code):
         res = f"You already issued a private channel request to user '{INPUT_COMMAND[1]}'."
     if error_code == "442":
         res = f"You have already issued a file transfer request with the file '{INPUT_COMMAND[2]}' to user '{INPUT_COMMAND[1]}'"
+    if error_code == "443":
+        res = f"You don't have any pending file share requests."
+    if error_code == "444":
+        res = f"You have no pending private channel request from user {INPUT_COMMAND[1]}"
+    if error_code == "445":
+        res = f"You have no pending share file request from user {INPUT_COMMAND[1]}"
     if error_code == "500":
         res = "Internal server error."
     return res
@@ -120,9 +153,12 @@ def return_passing_messages():
         res = f"You accepted {INPUT_COMMAND[1]}'s  private channel request. You can now DM {INPUT_COMMAND[1]}."
     if INPUT_COMMAND[0] == "declinefile":
         res = f"You declined {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'"
+        del pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]
     if INPUT_COMMAND[0] == "acceptfile":
         res = f"You accepted {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'"
-        receive_file_thread = threading.Thread(target=receive_file, args=(INPUT_COMMAND[2], COMMON_PORT, SENDER_HOST, ))
+        port = pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]['COMMON_PORT']
+        host = pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]['SENDER_HOST']
+        receive_file_thread = threading.Thread(target=receive_file, args=(INPUT_COMMAND[2], port, host, ))
         receive_file_thread.start()
         receive_file_thread.join()
     if INPUT_COMMAND[0] == "ping":
@@ -172,16 +208,15 @@ def return_messages_with_data(message):
         res = f"{message[1]} has declined your private channel request."
     if message[0].startswith("sharefile"):
         res = f"{message[1]} requests to share the file '{message[2]}' [{message[3]}] with you on port {message[5]}. Do you accept? "
-        global SENDER_HOST, COMMON_PORT
-        SENDER_HOST = message[4]
-        COMMON_PORT = message[5]
+        global pending_files
+        pending_files[(message[1], message[2])] = {'SENDER_HOST': message[4], 'COMMON_PORT': message[5]}
     if message[0].startswith("acceptedfile"):
         res = f"{message[1]} accepted your transfer for file {message[2]}. Transferring..."
         send_file_thread = threading.Thread(target=send_file, args=(FILE_PATH, SENDER_HOST, COMMON_PORT,))
         send_file_thread.start()
         send_file_thread.join()
     if message[0].startswith("declinedfile"):
-        res = f"{message[1]} declined your transfer for file {message[2]}."
+        res = f"{message[1]} declined your transfer for file '{message[2]}'."
     return res
 
 
@@ -192,7 +227,7 @@ def receive_message(client_socket):
         try:
             from_server = client_socket.recv(BUFFER_SIZE).decode(FORMAT)
             print(f"From Server: {from_server}")
-            global INPUT_COMMAND
+            global INPUT_COMMAND, is_transfer_complete
             if not isinstance(INPUT_COMMAND, list):
                 INPUT_COMMAND = INPUT_COMMAND.split()
 
@@ -209,6 +244,10 @@ def receive_message(client_socket):
             data_messages = return_messages_with_data(from_server)
             if data_messages is not None:
                 print(data_messages)
+
+            if is_transfer_complete:
+                print("Transfer complete")
+                is_transfer_complete = False
 
         except ConnectionResetError or ConnectionAbortedError:
             print("\nDisconnected from the server.")
