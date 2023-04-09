@@ -215,7 +215,7 @@ def afk(socket, message):
 def afk_from_server(user):
     user.state = 'afk'
     broadcast(f"afkFromSrv|{user.username}")
-    user.unicast("200", user.socket)
+    unicast("200", user.socket)
 
 
 def btk(socket, message):
@@ -243,7 +243,7 @@ def btk(socket, message):
 def btk_from_server(user):
     user.state = 'chatting'
     broadcast(f"btkFromSrv|{user.username}")
-    user.unicast("200", user.socket)
+    unicast("200", user.socket)
 
 
 def users(socket, message):
@@ -418,7 +418,7 @@ def channel(socket, message):
 def channel_from_server(user, target_user):
     target_user.add_pending_friends(user.username)
     unicast(f"channelFromSrv|{user.username}", target_user.socket)
-    user.unicast("200", socket)
+    unicast("200", user.socket)
 
 
 def acceptchannel(socket, message):
@@ -485,7 +485,7 @@ def acceptchannel_from_server(user, target_user):
         user.remove_pending_friends(target_user.username)
 
     unicast(f"acceptedchannelFromSrv|{user.username}", target_user.socket)
-    user.unicast("200", socket)
+    unicast("200", user.socket)
 
 
 def declinechannel(socket, message):
@@ -684,12 +684,13 @@ def acceptfile(socket, message):
         unicast("406", socket)
         return
 
-    acceptfile_from_server(socket, targeted_user.socket, user.username)
+    acceptfile_from_server(socket, targeted_user.socket, user, target_username_and_file)
 
 
-def acceptfile_from_server(socket, target_socket, username):
+def acceptfile_from_server(socket, target_socket, user, target_username_and_file):
     try:
-        unicast(f"acceptedfileFromSrv|{username}", target_socket)
+        user.remove_pending_files(target_username_and_file)
+        unicast(f"acceptedfileFromSrv|{user.username}", target_socket)
         unicast("200", socket)
     except socket.error:
         unicast("500", socket)
