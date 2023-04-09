@@ -90,6 +90,3 @@ class User:
 
     def remove_pending_files(self, value):
         self._pending_files.remove(value)
-
-
-
