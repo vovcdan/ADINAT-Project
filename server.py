@@ -108,6 +108,14 @@ def remove_user(socket):
         del clients[index]
 
 
+def convert_bytes(size):
+    """ Convert bytes to KB, or MB or GB"""
+    for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024.0:
+            return "%3.1f %s" % (size, x)
+        size /= 1024.0
+
+
 def signup(socket, message):
     # checks if command has the right number of parameters
     if len(message) != 2:
@@ -579,6 +587,11 @@ def msgpv(socket, message):
         return
 
     targeted_user = find_user_by_username(target_username)
+
+    if targeted_user.socket == socket:
+        unicast("407", socket)
+        return
+
     msgpv_from_server(socket, user.username, targeted_user.socket, mess)
 
 
@@ -620,7 +633,13 @@ def sharefile(socket, message):
 
     targeted_user = find_user_by_username(message[1])
 
+    if targeted_user.socket == socket:
+        unicast("407", socket)
+        return
+
     file = message[2]
+    file_size = os.path.getsize(file)
+    file_size = convert_bytes(file_size)
     port = message[3]
     if "\\" in message[2]:
         file = message[2].split("\\")
@@ -635,13 +654,13 @@ def sharefile(socket, message):
         unicast("442", socket)
         return
 
-    sharefile_from_server(user, file, targeted_user, port)
+    sharefile_from_server(user, file, targeted_user, port, file_size)
 
 
-def sharefile_from_server(user, file, target_user, port):
+def sharefile_from_server(user, file, target_user, port, file_size):
     try:
         target_user.add_pending_files((user.username, file))
-        unicast(f"sharefileFromSrv|{user.username}|{file}|{user.socket.getsockname()[0]}|{port}", target_user.socket)
+        unicast(f"sharefileFromSrv|{user.username}|{file}|{file_size}|{port}", target_user.socket)
         unicast("200", user.socket)
     except socket.error:
         unicast("500", user.socket)
@@ -678,6 +697,10 @@ def acceptfile(socket, message):
 
     targeted_user = find_user_by_username(message[1])
 
+    if targeted_user.socket == socket:
+        unicast("407", socket)
+        return
+
     target_username_and_file = (message[1], message[2])
 
     if target_username_and_file not in user.pending_files:
@@ -690,7 +713,7 @@ def acceptfile(socket, message):
 def acceptfile_from_server(socket, target_socket, user, target_username_and_file):
     try:
         user.remove_pending_files(target_username_and_file)
-        unicast(f"acceptedfileFromSrv|{user.username}", target_socket)
+        unicast(f"acceptedfileFromSrv|{user.username}|{user.socket.getsockname()[0]}", target_socket)
         unicast("200", socket)
     except socket.error:
         unicast("500", socket)

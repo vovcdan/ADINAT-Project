@@ -13,9 +13,7 @@ TARGET_PORT = 0
 DOWNLOADS = ''
 
 
-def get_target_address(host, port):
-    global TARGET_HOST
-    TARGET_HOST = host
+def get_target_port(port):
     global TARGET_PORT
     TARGET_PORT = int(port)
 
@@ -86,6 +84,7 @@ def return_passing_messages():
         res = f"You declined {COMMAND[1]}'s  private channel request."
     if COMMAND[0] == "sharefile":
         res = f"You sent a share file request to {COMMAND[1]}."
+        get_target_port(COMMAND[3])
     if COMMAND[0] == "acceptchannel":
         res = f"You accepted {COMMAND[1]}'s  private channel request. You can now DM {COMMAND[1]}."
     if COMMAND[0] == "declinefile":
@@ -139,8 +138,8 @@ def return_messages_with_data(message):
     if message[0].startswith("declinedchannel"):
         res = f"{message[1]} has declined your private channel request."
     if message[0].startswith("sharefile"):
-        res = f"{message[1]} requests to share the file {message[2]} with you on port {message[4]}. Do you accept?"
-        get_target_address(message[3], message[4])
+        res = f"{message[1]} requests to share the file '{message[2]}' [{message[3]}] with you on port {message[4]}. Do you accept?"
+        get_target_port(message[4])
     if message[0].startswith("acceptedfile"):
         res = f"{message[1]} accepted your transfer for file {message[2]}. Transferring..."
     if message[0].startswith("declinedfile"):
