@@ -190,7 +190,7 @@ def return_messages_with_data(message):
         res = f"{message[1]}: {message[2]}"
     if message[0].startswith("msgpv"):
         res = f"DM from {message[1]}: {message[2]}"
-    if message[0].startswith("exit"):
+    if message[0].startswith("exited"):
         res = f"{message[1]} has left the server."
     if message[0].startswith("afk"):
         res = f"{message[1]} is now away from keyboard."
