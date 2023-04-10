@@ -1295,7 +1295,7 @@ def process_client(client_socket, client_address):
             message = client_socket.recv(SIZE).decode(FORMAT)
             if not len(message):
                 return
-            write_to_log(f"FROM {str(adr_client)} REQUEST: {message.upper()}")
+            write_to_log(f"FROM {str(adr_client)} REQUEST: {message}")
             command = message.split(" ")
             if command[0] == "signup":
                 signup(client_socket, command)
