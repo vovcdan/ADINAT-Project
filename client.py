@@ -12,12 +12,33 @@ DOWNLOADS_PATH = ''
 global SENDER_HOST
 global COMMON_PORT
 pending_files = {}
+private_messages_threads = {}
 is_transfer_complete = False
 can_say_transfer_complete = True
 transfer_mutex = threading.Lock()
 can_say_transfer_condition = threading.Condition(transfer_mutex)
 FILE_PATH = ''
 global socket
+
+
+def create_private_message_thread(client_socket, sender):
+    print("i am in the thread")
+    while True:
+        try:
+            from_server = client_socket.recv(BUFFER_SIZE).decode(FORMAT)
+            print(f"From Server: {from_server}")
+            global INPUT_COMMAND
+            if not isinstance(INPUT_COMMAND, list):
+                INPUT_COMMAND = INPUT_COMMAND.split()
+
+            message = from_server.split("|")
+            if message[0].startswith("msgpvFrom") and message[1] == sender:
+                print(f"DM from {sender}: {message[2]}")
+
+        except ConnectionResetError or ConnectionAbortedError:
+            print("\nDisconnected from the server.")
+            client_socket.close()
+            break
 
 
 def send_file(path, sender_host, port):
@@ -145,6 +166,9 @@ def return_passing_messages():
         res = f"You sent a private channel request to {INPUT_COMMAND[1]}."
     if INPUT_COMMAND[0] == "declinechannel":
         res = f"You declined {INPUT_COMMAND[1]}'s  private channel request."
+    if INPUT_COMMAND[0] == "msgpv":
+        mess = ' '.join(INPUT_COMMAND[2:])
+        res = f"DM to {INPUT_COMMAND[1]}: {mess}"
     if INPUT_COMMAND[0] == "sharefile":
         res = f"You sent a share file request to {INPUT_COMMAND[1]}."
         global FILE_PATH, COMMON_PORT, SENDER_HOST
@@ -153,6 +177,11 @@ def return_passing_messages():
         SENDER_HOST = socket.getsockname()[0]
     if INPUT_COMMAND[0] == "acceptchannel":
         res = f"You accepted {INPUT_COMMAND[1]}'s  private channel request. You can now DM {INPUT_COMMAND[1]}."
+        global private_messages_threads
+        if INPUT_COMMAND[1] not in private_messages_threads:
+            thread = threading.Thread(target=create_private_message_thread, name=f'msgpvFrom{INPUT_COMMAND[1]}', args=(socket, INPUT_COMMAND[1]))
+            thread.start()
+            private_messages_threads[INPUT_COMMAND[1]] = thread
     if INPUT_COMMAND[0] == "declinefile":
         res = f"You declined {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'"
         del pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]
@@ -186,11 +215,11 @@ def return_messages_with_data(message):
     message = message.split("|")
     if message[0].startswith("signup"):
         res = f"{message[1]} has joined the chatroom!"
-    if message[0].startswith("msg"):
+    if message[0].startswith("msgFrom"):
         res = f"{message[1]}: {message[2]}"
-    if message[0].startswith("msgpv"):
-        res = f"DM from {message[1]}: {message[2]}"
-    if message[0].startswith("exit"):
+    # if message[0].startswith("msgpv"):
+    #     res = f"DM from {message[1]}: {message[2]}"
+    if message[0].startswith("exited"):
         res = f"{message[1]} has left the server."
     if message[0].startswith("afk"):
         res = f"{message[1]} is now away from keyboard."
@@ -206,6 +235,11 @@ def return_messages_with_data(message):
         res = f"{message[1]} requests a private channel with you. Do you accept?"
     if message[0].startswith("acceptedchannel"):
         res = f"{message[1]} has accepted your private channel request. You can now DM {message[1]}"
+        global private_messages_threads
+        if INPUT_COMMAND[1] not in private_messages_threads:
+            thread = threading.Thread(target=create_private_message_thread, name=f'msgpvFrom{message[1]}', args=(socket, message[1], ))
+            thread.start()
+            private_messages_threads[INPUT_COMMAND[1]] = thread
     if message[0].startswith("declinedchannel"):
         res = f"{message[1]} has declined your private channel request."
     if message[0].startswith("sharefile"):
@@ -278,8 +312,6 @@ if __name__ == '__main__':
         read_from_config()
 
         socket = s.socket(s.AF_INET, s.SOCK_STREAM)
-        print(SERVER_HOST)
-        print(SERVER_PORT)
         socket.connect((SERVER_HOST, int(SERVER_PORT)))
 
         print("Connected to the server! Type 'signup <username>' to join the chatroom.")

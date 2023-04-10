@@ -282,7 +282,7 @@ def msg_from_server(username, message, socket):
     :param socket: Socket of the user.
     """
     try:
-        broadcast(f"msgFromServer|{username}|{message}")
+        broadcast(f"msgFromSrv|{username}|{message}")
         unicast("200", socket)
     except s.error:
         unicast("500", socket)
@@ -321,7 +321,7 @@ def exit_from_server(username, socket):
     try:
         remove_user(socket)
         socket.close()
-        broadcast(f"exitFromSrv|{username}")
+        broadcast(f"exitedFromSrv|{username}")
     except s.error:
         unicast("500", socket)
 
@@ -968,7 +968,7 @@ def msgpv(socket, message):
 
 def msgpv_from_server(socket, username, target_socket, message):
     """
-    userA send a private message to userB.
+    userA sends a private message to userB.
 
     :param socket: Socket of userA.
     :param username: Username of userA.
