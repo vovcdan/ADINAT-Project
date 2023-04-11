@@ -1,6 +1,7 @@
 import socket as s
 import yaml
 import threading
+import tkinter as tk
 
 SERVER_HOST = ''
 SERVER_PORT = 0
@@ -18,6 +19,21 @@ transfer_mutex = threading.Lock()
 can_say_transfer_condition = threading.Condition(transfer_mutex)
 FILE_PATH = ''
 global socket
+
+# Créer la fenêtre principale de l'interface graphique
+fenetre = tk.Tk()
+fenetre.title("Exécuteur de commandes")
+
+# Créer un champ de saisie pour la commande
+champ_saisie = tk.Entry(fenetre)
+champ_saisie.pack()
+
+# Créer une fenêtre de texte pour afficher la sortie de la commande
+champ_sortie = tk.Text(fenetre)
+champ_sortie.pack()
+
+def afficher_texte(texte):
+    champ_sortie.insert(tk.END, texte + '\n') 
 
 
 def send_file(path, sender_host, port):
@@ -239,40 +255,39 @@ def receive_message(client_socket):
             if from_server != "200":
                 error_message = return_error_message(from_server)
                 if error_message is not None:
-                    print(error_message)
+                    afficher_texte(error_message)
 
             if from_server == "200":
                 passing_messages = return_passing_messages()
                 if passing_messages is not None:
-                    print(passing_messages)
+                    afficher_texte(passing_messages)
 
             data_messages = return_messages_with_data(from_server)
             if data_messages is not None:
-                print(data_messages)
+                afficher_texte(data_messages)
 
             if is_transfer_complete:
                 print("Transfer complete")
                 is_transfer_complete = False
 
         except ConnectionResetError or ConnectionAbortedError:
-            print("\nDisconnected from the server.")
+            afficher_texte("\nDisconnected from the server.")
             client_socket.close()
             break
 
-
-def send_message(client_socket):
+def send_message(client_socket, commande):
     global INPUT_COMMAND
     global stop_thread
     while True:
         if stop_thread:
             break
         try:
-            INPUT_COMMAND = input()
+            INPUT_COMMAND = commande
             if INPUT_COMMAND.lower() == "exit":
                 stop_thread = True
             client_socket.sendall(INPUT_COMMAND.lower().encode(FORMAT))
         except ConnectionResetError or ConnectionAbortedError:
-            print("\nDisconnected from the server.")
+            afficher_texte("\nDisconnected from the server.")
             break
 
 
@@ -283,10 +298,21 @@ if __name__ == '__main__':
         socket = s.socket(s.AF_INET, s.SOCK_STREAM)
         socket.connect((SERVER_HOST, int(SERVER_PORT)))
 
-        print("Connected to the server! Type 'signup <username>' to join the chatroom.")
+        afficher_texte("Connected to the server! Type 'signup <username>' to join the chatroom.")
 
         threading.Thread(target=receive_message, args=(socket,)).start()
         threading.Thread(target=send_message, args=(socket,)).start()
     except KeyboardInterrupt:
-        print("Closing...")
+        afficher_texte("Closing...")
 
+def executer_commande() : 
+    commande = champ_saisie.get()
+    send_message("client_socket",commande)
+    
+
+# Créer un bouton pour exécuter la commande
+bouton_executer = tk.Button(fenetre, text="Exécuter", command=executer_commande)
+bouton_executer.pack()
+
+# Lancer la boucle d'événements de l'interface graphique
+fenetre.mainloop()
