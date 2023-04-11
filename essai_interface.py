@@ -25,6 +25,7 @@ champ_saisie.pack()
 champ_sortie = tk.Text(fenetre)
 champ_sortie.pack()
 
+
 def afficher_texte(texte):
     champ_sortie.insert(tk.END, texte + '\n') 
 
@@ -34,20 +35,15 @@ def get_target_address(host, port):
     TARGET_HOST = host
     global TARGET_PORT
     TARGET_PORT = int(port)
-
-
 def read_from_config():
     with open('adinat_config.yaml', 'r') as config_file:
         config = yaml.load(config_file, Loader=yaml.FullLoader)
-
     global HOST
     HOST = config['client']['host']
     global PORT
     PORT = config['client']['port']
     global DOWNLOADS
     DOWNLOADS = config['client']['downloads']
-
-
 def return_error_message(error_code):
     res = None
     if error_code == "400":
@@ -92,25 +88,8 @@ def return_error_message(error_code):
     if error_code == "500":
         res = "Internal server error."
     return res
-
-
 def return_passing_messages():
     res = None
-    if COMMAND[0] == "channel":
-        res = f"You sent a private channel request to {COMMAND[1]}."
-    if COMMAND[0] == "declinechannel":
-        res = f"You declined {COMMAND[1]}'s  private channel request."
-    if COMMAND[0] == "sharefile":
-        res = f"You sent a share file request to {COMMAND[1]}."
-    if COMMAND[0] == "acceptchannel":
-        res = f"You accepted {COMMAND[1]}'s  private channel request. You can now DM {COMMAND[1]}."
-    if COMMAND[0] == "declinefile":
-        res = f"You declined {COMMAND[1]}'s share file request for the file '{COMMAND[2]}'"
-    if COMMAND[0] == "acceptfile":
-        res = f"You accepted {COMMAND[1]}'s share file request for the file '{COMMAND[2]}'"
-    if COMMAND[0] == "ping":
-        afficher_texte(f"You successfully pinged {COMMAND[1]}.")
-        res = f"You successfully pinged {COMMAND[1]}."
     if COMMAND[0] == "rename":
         res = f"You successfully changed your name to {COMMAND[1]}."
     if COMMAND[0] == "help":
@@ -125,44 +104,17 @@ def return_passing_messages():
               "user. \nacceptfile USERNAME FILE_NAME: Accept the file to share request.\ndeclinefile USERNAME " \
               "FILE_NAME: Decline de file to share request. "
     return res
-
-
-def return_messages_with_data(message):
+def return_messages_with_data():
+    message = champ_saisie.get()
     res = None
     message = message.split("|")
     if message[0].startswith("signup"):
         res = f"{message[1]} has joined the chatroom!"
-    if message[0].startswith("msg"):
-        res = f"{message[1]}: {message[2]}"
-    if message[0].startswith("msgpv"):
-        res = f"DM from {message[1]}: {message[2]}"
     if message[0].startswith("exit"):
         res = f"{message[1]} has left the server."
-    if message[0].startswith("afk"):
-        res = f"{message[1]} is now away from keyboard."
-    if message[0].startswith("btk"):
-        res = f"{message[1]} is now back to keyboard."
-    if message[0].startswith("users"):
-        res = f"List of connected users : {message[1]}"
     if message[0].startswith("rename"):
         res = f"{message[1]} changed his name to {message[2]}."
-    if message[0].startswith("ping"):
-        res = f"{message[1]} has pinged you!"
-    if message[0].startswith("channel"):
-        res = f"{message[1]} requests a private channel with you. Do you accept?"
-    if message[0].startswith("acceptedchannel"):
-        res = f"{message[1]} has accepted your private channel request. You can now DM {message[1]}"
-    if message[0].startswith("declinedchannel"):
-        res = f"{message[1]} has declined your private channel request."
-    if message[0].startswith("sharefile"):
-        res = f"{message[1]} requests to share the file {message[2]} with you on port {message[4]}. Do you accept?"
-        get_target_address(message[3], message[4])
-    if message[0].startswith("acceptedfile"):
-        res = f"{message[1]} accepted your transfer for file {message[2]}. Transferring..."
-    if message[0].startswith("declinedfile"):
-        res = f"{message[1]} declined your transfer for file {message[2]}."
     return res
-
 
 def receive_message(client_socket):
     while True:
@@ -174,61 +126,54 @@ def receive_message(client_socket):
             global COMMAND
             if not isinstance(COMMAND, list):
                 COMMAND = COMMAND.split()
-
             if from_server != "200":
                 error_message = return_error_message(from_server)
                 if error_message is not None:
-                    afficher_texte(error_message)
-
+                    print(error_message)
             if from_server == "200":
                 passing_messages = return_passing_messages()
                 if passing_messages is not None:
-                    afficher_texte(passing_messages)
-
+                    print(passing_messages)
             data_messages = return_messages_with_data(from_server)
             if data_messages is not None:
-                afficher_texte(data_messages)
-
+                print(data_messages)
         except ConnectionResetError or ConnectionAbortedError:
-            afficher_texte("\nDisconnected from the server.")
+            print("\nDisconnected from the server.")
             client_socket.close()
             break
-
-
-def send_message(client_socket, commande):
+def send_message(client_socket):
     global COMMAND
     global stop_thread
     while True:
         if stop_thread:
             break
         try:
-            COMMAND = commande
+            COMMAND = input().lower()
             if COMMAND == "exit":
                 stop_thread = True
             client_socket.sendall(COMMAND.encode(FORMAT))
         except ConnectionResetError or ConnectionAbortedError:
-            afficher_texte("\nDisconnected from the server.")
+            print("\nDisconnected from the server.")
             break
+
+def executer_commande() : 
+    send_message
+    receive_message
+    return_messages_with_data
+    return_passing_messages
+    return_error_message
 
 
 if __name__ == '__main__':
     try:
         read_from_config()
-
         socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         socket.connect((HOST, int(PORT)))
-
         afficher_texte("Connected to the server! Type 'signup <username>' to join the chatroom.")
-
         threading.Thread(target=receive_message, args=(socket, )).start()
         threading.Thread(target=send_message, args=(socket, )).start()
     except KeyboardInterrupt:
-        afficher_texte("Closing...")
-
-def executer_commande() : 
-    commande = champ_saisie.get()
-    send_message("client_socket",commande)
-    
+        print("Closing...")
 
 # Créer un bouton pour exécuter la commande
 bouton_executer = tk.Button(fenetre, text="Exécuter", command=executer_commande)
@@ -236,3 +181,9 @@ bouton_executer.pack()
 
 # Lancer la boucle d'événements de l'interface graphique
 fenetre.mainloop()
+
+
+
+
+
+
