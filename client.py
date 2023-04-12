@@ -20,7 +20,7 @@ transfer_mutex = threading.Lock()
 can_say_transfer_condition = threading.Condition(transfer_mutex)
 FILE_PATH = ''
 global socket
-global fenetre
+global window
 global champ_saisie
 global champ_sortie
 
@@ -284,9 +284,7 @@ def return_messages_with_data(message):
 
 
 def receive_message(client_socket):
-    while True:
-        if stop_thread:
-            break
+    while not stop_thread:
         try:
             from_server = client_socket.recv(BUFFER_SIZE).decode(FORMAT)
             print(f"From Server: {from_server}")
@@ -321,14 +319,13 @@ def receive_message(client_socket):
 def send_message(client_socket):
     global INPUT_COMMAND
     global stop_thread
-    while True:
+    while not stop_thread:
         try:
             INPUT_COMMAND = input()
             if not isinstance(INPUT_COMMAND, list):
                 INPUT_COMMAND = INPUT_COMMAND.split()
-
             INPUT_COMMAND[0] = INPUT_COMMAND[0].lower()
-            INPUT_COMMAND = ' '.join(INPUT_COMMAND[0:])
+            INPUT_COMMAND = ' '.join(INPUT_COMMAND)
             if INPUT_COMMAND == "exit":
                 stop_thread = True
             if INPUT_COMMAND.startswith("sharefile"):
@@ -356,12 +353,12 @@ def send_message(client_socket):
                 file_size = convert_bytes(file_size)
 
                 INPUT_COMMAND.append(file_size)
-
-                INPUT_COMMAND = ' '.join(INPUT_COMMAND[0:])
+                INPUT_COMMAND = ' '.join(INPUT_COMMAND)
                 print(INPUT_COMMAND)
 
             client_socket.sendall(INPUT_COMMAND.encode(FORMAT))
         except ConnectionResetError or ConnectionAbortedError:
+            stop_thread = True
             afficher_texte("\nDisconnected from the server.")
 
 

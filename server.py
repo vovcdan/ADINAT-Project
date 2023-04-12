@@ -14,8 +14,11 @@ SERVER_PORT = 0
 FORMAT = 'utf-8'
 SIZE = 1024
 can_write = True
+can_access_data = True
+mutex_access_data = threading.Lock()
 mutex = threading.Lock()
 writing_condition = threading.Condition(mutex)
+accessing_data_condition = threading.Condition(mutex_access_data)
 
 
 def read_from_config():
@@ -76,10 +79,12 @@ def broadcast(message):
     :param message: The message to be sent.
     :return:
     """
-    for user in clients:
-        socket_client = user.socket
-        socket_client.sendall(message.encode(FORMAT))
-    write_to_log(f"RESPONSE: {message}")
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
+        for user in clients:
+            socket_client = user.socket
+            socket_client.sendall(message.encode(FORMAT))
+        write_to_log(f"RESPONSE: {message}")
 
 
 def unicast(message, socket):
@@ -101,10 +106,41 @@ def is_user_connected(socket):
     :param socket: The socket of the user.
     :return boolean
     """
-    for user in clients:
-        if user.socket == socket:
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
+        for user in clients:
+            if user.socket == socket:
+                return True
+        return False
+
+
+def is_user_in_clients_list(user):
+    """
+    Checks if a user is connected based on the user object in the clients list.
+
+    :param user: An user.
+    :return boolean
+    """
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
+        if user in clients:
             return True
-    return False
+        return False
+
+
+def is_username_connected(username):
+    """
+    Checks if a user is connected based on his username.
+
+    :param username: An username.
+    :return boolean
+    """
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
+        # we create a new list of usernames and if the username given is in that list we send a code error
+        if username in [client.username for client in clients]:
+            return True
+        return False
 
 
 def find_user_by_socket(socket):
@@ -114,10 +150,12 @@ def find_user_by_socket(socket):
     :param socket: The socket of the user.
     :return user
     """
-    for user in clients:
-        if user.socket == socket:
-            return user
-    return None
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
+        for user in clients:
+            if user.socket == socket:
+                return user
+        return None
 
 
 def find_user_by_username(username):
@@ -127,10 +165,12 @@ def find_user_by_username(username):
     :param username: Username of the user.
     :return user
     """
-    for user in clients:
-        if user.username == username:
-            return user
-    return None
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
+        for user in clients:
+            if user.username == username:
+                return user
+        return None
 
 
 def find_socket(username):
@@ -140,10 +180,12 @@ def find_socket(username):
     :param username: Username of the user.
     :return socket
     """
-    for user in clients:
-        if user.username == username:
-            return user.socket
-    return None
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
+        for user in clients:
+            if user.username == username:
+                return user.socket
+        return None
 
 
 def remove_user(socket):
@@ -152,14 +194,22 @@ def remove_user(socket):
 
     :param socket: Socket of the user.
     """
-    index = None
-    for i, user in enumerate(clients):
-        if user.socket == socket:
-            index = i
-            break
+    global can_access_data
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
+        index = None
+        for i, user in enumerate(clients):
+            if user.socket == socket:
+                index = i
+                break
 
-    if index is not None:
-        del clients[index]
+        if index is not None:
+            del clients[index]
+
+    with mutex_access_data:
+        can_access_data = True
+        accessing_data_condition.notify_all()
 
 
 def signup(socket, message):
@@ -183,14 +233,18 @@ def signup(socket, message):
         unicast("403", socket)
         return
 
+    with mutex_access_data:
+        accessing_data_condition.wait_for(lambda: can_access_data)
     # checks if user is already logged in and if username is already taken
-    for user in clients:
-        if user.socket == socket and user.state is not None:
-            unicast("417", socket)
-            return
-        if message[1] == user.username:
-            unicast("425", socket)
-            return
+        for user in clients:
+            if user.socket == socket and user.state is not None:
+                unicast("417", socket)
+                return
+            if message[1] == user.username:
+                unicast("425", socket)
+                return
+
+        accessing_data_condition.notify_all()
 
     # checks if username contains special characters or numbers
     if not message[1].isalpha():
@@ -209,7 +263,15 @@ def signup_from_srv(socket, username):
     :param username: Username of the user.
     """
     try:
-        clients.append(User(username, socket))
+        global can_access_data
+        with mutex_access_data:
+            accessing_data_condition.wait_for(lambda: can_access_data)
+            can_access_data = False
+            clients.append(User(username, socket))
+
+        with mutex_access_data:
+            can_access_data = True
+            accessing_data_condition.notify_all()
         broadcast(f"signupFromSrv|{username}")
         unicast("200", socket)
     except s.error:
@@ -243,7 +305,7 @@ def msg(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -294,8 +356,11 @@ def exit(socket, message):
 
     user = find_user_by_socket(socket)
 
-    # calls the function to process the command for the user
-    exit_from_server(user.username, user.socket)
+    if user is not None:
+        # calls the function to process the command for the user
+        exit_from_server(user.username, socket)
+    else:
+        exit_from_server(None, socket)
 
 
 def exit_from_server(username, socket):
@@ -306,9 +371,12 @@ def exit_from_server(username, socket):
     :param socket: Socket of the user that left.
     """
     try:
-        remove_user(socket)
+        if username is not None:
+            remove_user(socket)
         socket.close()
-        broadcast(f"exitedFromSrv|{username}")
+        if username is not None:
+            broadcast(f"exitedFromSrv|{username}")
+        print(f"Client {str(adr_client)} disconnected.")
     except s.error:
         unicast("500", socket)
 
@@ -335,7 +403,7 @@ def afk(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -384,7 +452,7 @@ def btk(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -432,7 +500,7 @@ def users(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -451,13 +519,16 @@ def users_from_server(socket):
     :param socket: Socket of the user.
     """
     try:
-        res = "usersFromSrv|["
-        for user in clients:
-            res += f"{user.username}, "
-        res = res[:-2]
-        res += "]"
-        unicast(res, socket)
-        unicast("200", socket)
+        global can_access_data
+        with mutex_access_data:
+            accessing_data_condition.wait_for(lambda: can_access_data)
+            res = "usersFromSrv|["
+            for user in clients:
+                res += f"{user.username}, "
+            res = res[:-2]
+            res += "]"
+            unicast(res, socket)
+            unicast("200", socket)
     except s.error:
         unicast("500", socket)
 
@@ -487,7 +558,7 @@ def ping(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -497,8 +568,7 @@ def ping(socket, message):
         return
 
     # checks if username exists
-    # we create a new list of usernames and if the username given isn't in that list we send a code error
-    if message[1] not in [client.username for client in clients]:
+    if not is_username_connected(message[1]):
         unicast("402", socket)
         return
 
@@ -555,7 +625,7 @@ def rename(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -565,8 +635,7 @@ def rename(socket, message):
         return
 
     # checks if username exists
-    # we create a new list of usernames and if the username given is in that list we send a code error
-    if message[1] in [client.username for client in clients]:
+    if is_username_connected(message[1]):
         unicast("425", socket)
         return
 
@@ -590,15 +659,17 @@ def rename_from_server(user, new_username, socket):
     try:
         old_username = user.username
         user.username = new_username
+        global can_access_data
+        with mutex_access_data:
+            accessing_data_condition.wait_for(lambda: can_access_data)
+            for user in clients:
+                if old_username in user.friends:
+                    user.remove_friends(old_username)
+                    user.add_friends(new_username)
 
-        for user in clients:
-            if old_username in user.friends:
-                user.remove_friends(old_username)
-                user.add_friends(new_username)
-
-            if old_username in user.pending_friends:
-                user.remove_pending_friends(old_username)
-                user.add_pending_friends(new_username)
+                if old_username in user.pending_friends:
+                    user.remove_pending_friends(old_username)
+                    user.add_pending_friends(new_username)
 
         broadcast(f"renameFromSrv|{old_username}|{new_username}")
         unicast("200", socket)
@@ -634,7 +705,7 @@ def channel(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -644,8 +715,7 @@ def channel(socket, message):
         return
 
     # checks if username exists
-    # we create a new list of usernames and if the username given isn't in that list we send a code error
-    if message[1] not in [client.username for client in clients]:
+    if not is_username_connected(message[1]):
         unicast("402", socket)
         return
 
@@ -713,7 +783,7 @@ def acceptchannel(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -723,8 +793,7 @@ def acceptchannel(socket, message):
         return
 
     # checks if username exists
-    # we create a new list of usernames and if the username given isn't in that list we send a code error
-    if message[1] not in [client.username for client in clients]:
+    if not is_username_connected(message[1]):
         unicast("402", socket)
         return
 
@@ -819,7 +888,7 @@ def declinechannel(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -829,8 +898,7 @@ def declinechannel(socket, message):
         return
 
     # checks if username exists
-    # we create a new list of usernames and if the username given isn't in that list we send a code error
-    if message[1] not in [client.username for client in clients]:
+    if not is_username_connected(message[1]):
         unicast("402", socket)
         return
 
@@ -918,7 +986,7 @@ def msgpv(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -933,7 +1001,7 @@ def msgpv(socket, message):
 
     # checks if username exists
     # we create a new list of usernames and if the username given isn't in that list we send a code error
-    if target_username not in [client.username for client in clients]:
+    if not is_username_connected(target_username):
         unicast("402", socket)
         return
 
@@ -999,7 +1067,7 @@ def sharefile(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -1009,8 +1077,7 @@ def sharefile(socket, message):
         return
 
     # checks if username exists
-    # we create a new list of usernames and if the username given isn't in that list we send a code error
-    if message[1] not in [client.username for client in clients]:
+    if not is_username_connected(message[1]):
         unicast("402", socket)
         return
 
@@ -1092,7 +1159,7 @@ def acceptfile(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -1102,8 +1169,7 @@ def acceptfile(socket, message):
         return
 
     # checks if username exists
-    # we create a new list of usernames and if the username given isn't in that list we send a code error
-    if message[1] not in [client.username for client in clients]:
+    if not is_username_connected(message[1]):
         unicast("402", socket)
         return
 
@@ -1182,7 +1248,7 @@ def declinefile(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if user not in clients:
+    if is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -1192,8 +1258,7 @@ def declinefile(socket, message):
         return
 
     # checks if username exists
-    # we create a new list of usernames and if the username given isn't in that list we send a code error
-    if message[1] not in [client.username for client in clients]:
+    if not is_username_connected(message[1]):
         unicast("402", socket)
         return
 
@@ -1278,8 +1343,9 @@ def process_client(client_socket, client_address):
                 help_command(client_socket, command)
             elif command[0] == "msg":
                 msg(client_socket, command)
-            elif command[0] == "exit":  # NOT WORKING AS INTENDED
+            elif command[0] == "exit":
                 exit(client_socket, command)
+                break
             elif command[0] == "afk":
                 afk(client_socket, command)
             elif command[0] == "btk":
@@ -1309,12 +1375,13 @@ def process_client(client_socket, client_address):
         except s.error:
             # finds the user by socket
             user = find_user_by_socket(client_socket)
-            username = user.username
+            if user is not None:
+                username = user.username
             # removes the user from the clients list
-            remove_user(client_socket)
+                remove_user(client_socket)
+                broadcast(f"exitedFromSrv|{username}")
             write_to_log(f"SUDDEN DISCONNECT FROM {str(adr_client)}")
             client_socket.close()
-            broadcast(f"exitedFromSrv|{username}")
             print(f"Client {str(client_address)} disconnected.")
             break
 

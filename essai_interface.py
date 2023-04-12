@@ -14,15 +14,15 @@ TARGET_PORT = 0
 DOWNLOADS = ''
 
 # Créer la fenêtre principale de l'interface graphique
-fenetre = tk.Tk()
-fenetre.title("Exécuteur de commandes")
+window = tk.Tk()
+window.title("Exécuteur de commandes")
 
 # Créer un champ de saisie pour la commande
-champ_saisie = tk.Entry(fenetre)
+champ_saisie = tk.Entry(window)
 champ_saisie.pack()
 
 # Créer une fenêtre de texte pour afficher la sortie de la commande
-champ_sortie = tk.Text(fenetre)
+champ_sortie = tk.Text(window)
 champ_sortie.pack()
 
 
@@ -176,11 +176,11 @@ if __name__ == '__main__':
         print("Closing...")
 
 # Créer un bouton pour exécuter la commande
-bouton_executer = tk.Button(fenetre, text="Exécuter", command=executer_commande)
+bouton_executer = tk.Button(window, text="Exécuter", command=executer_commande)
 bouton_executer.pack()
 
 # Lancer la boucle d'événements de l'interface graphique
-fenetre.mainloop()
+window.mainloop()
 
 
 
