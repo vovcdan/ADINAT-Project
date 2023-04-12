@@ -162,19 +162,6 @@ def remove_user(socket):
         del clients[index]
 
 
-def convert_bytes(size):
-    """
-    Convert bytes to KB, or MB or GB.
-
-    :param size: Size of the bytes.
-    :return double
-    """
-    for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
-        if size < 1024.0:
-            return "%3.1f %s" % (size, x)
-        size /= 1024.0
-
-
 def signup(socket, message):
     """
     Checks if the user is able to sign up into the chatroom.
@@ -1005,7 +992,7 @@ def sharefile(socket, message):
                     4. The port to be used for transfer.
     """
     # checks if command has the right number of parameters
-    if len(message) != 4:
+    if len(message) != 5:
         unicast("403", socket)
         return
 
@@ -1027,11 +1014,6 @@ def sharefile(socket, message):
         unicast("402", socket)
         return
 
-    # checks if path to file exists
-    if not os.path.isfile(message[2]):
-        unicast("405", socket)
-        return
-
     targeted_user = find_user_by_username(message[1])
 
     # checks if the username given in the parameter isn't the client himself
@@ -1041,17 +1023,6 @@ def sharefile(socket, message):
         return
 
     file = message[2]
-    # gets size of file
-    file_size = os.path.getsize(file)
-    # converts size of file to human-readable units, a.k.a. KB, MB or GB
-    file_size = convert_bytes(file_size)
-    port = message[3]  # the port should be checked if it can be used...
-
-    # checks if port is within reach
-    if int(port) > 65535:
-        unicast("446", socket)
-        return
-
     # gets only the name and extension of the file
     if "\\" in message[2]:
         file = message[2].split("\\")
@@ -1059,6 +1030,10 @@ def sharefile(socket, message):
     elif "/" in message[2]:
         file = message[2].split("/")
         file = file[-1]
+
+    port = message[3]
+
+    file_size = message[4]
 
     username_and_file = (user.username, file)
 
@@ -1339,7 +1314,7 @@ def process_client(client_socket, client_address):
             remove_user(client_socket)
             write_to_log(f"SUDDEN DISCONNECT FROM {str(adr_client)}")
             client_socket.close()
-            broadcast(f"exitFromSrv|{username}")
+            broadcast(f"exitedFromSrv|{username}")
             print(f"Client {str(client_address)} disconnected.")
             break
 

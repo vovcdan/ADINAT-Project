@@ -1,3 +1,4 @@
+import os
 import socket as s
 import yaml
 import threading
@@ -19,21 +20,62 @@ transfer_mutex = threading.Lock()
 can_say_transfer_condition = threading.Condition(transfer_mutex)
 FILE_PATH = ''
 global socket
+global fenetre
+global champ_saisie
+global champ_sortie
 
-# Créer la fenêtre principale de l'interface graphique
-fenetre = tk.Tk()
-fenetre.title("Exécuteur de commandes")
 
-# Créer un champ de saisie pour la commande
-champ_saisie = tk.Entry(fenetre)
-champ_saisie.pack()
+# def create_interface(client_socket):
+#     global fenetre
+#     # Créer la fenêtre principale de l'interface graphique
+#     fenetre = tk.Tk()
+#     fenetre.title("Exécuteur de commandes")
+#
+#     # Créer un champ de saisie pour la commande
+#     global champ_saisie
+#     champ_saisie = tk.Entry(fenetre)
+#     champ_saisie.pack()
+#
+#     # Créer une fenêtre de texte pour afficher la sortie de la commande
+#     global champ_sortie
+#     champ_sortie = tk.Text(fenetre)
+#     champ_sortie.pack()
+#
+#     # Lancer la boucle d'événements de l'interface graphique
+#     fenetre.mainloop()
+#
+#     afficher_texte("Connected to the server! Type 'signup <username>' to join the chatroom.")
+#
+#     while True:
+#         if stop_thread:
+#             break
+#         try:
+#             command = champ_saisie.get()
+#             # send_message(client_socket, command)
+#             bouton_executer = tk.Button(fenetre, text="Exécuter", command=send_message(client_socket, command))
+#             # Créer un bouton pour exécuter la commande
+#             bouton_executer.pack()
+#
+#         except ConnectionResetError or ConnectionAbortedError:
+#             print("Disconnected from server.")
+#             break
 
-# Créer une fenêtre de texte pour afficher la sortie de la commande
-champ_sortie = tk.Text(fenetre)
-champ_sortie.pack()
 
 def afficher_texte(texte):
-    champ_sortie.insert(tk.END, texte + '\n') 
+    champ_sortie.insert(tk.END, texte + '\n')
+
+
+def convert_bytes(size):
+    """
+    Convert bytes to KB, or MB or GB.
+
+    :param size: Size of the bytes.
+    :return double
+    """
+    for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
+        if size < 1024.0:
+            return "%3.1f%s" % (size, x)
+        size /= 1024.0
 
 
 def send_file(path, sender_host, port):
@@ -255,16 +297,16 @@ def receive_message(client_socket):
             if from_server != "200":
                 error_message = return_error_message(from_server)
                 if error_message is not None:
-                    afficher_texte(error_message)
+                    print(error_message)
 
             if from_server == "200":
                 passing_messages = return_passing_messages()
                 if passing_messages is not None:
-                    afficher_texte(passing_messages)
+                    print(passing_messages)
 
             data_messages = return_messages_with_data(from_server)
             if data_messages is not None:
-                afficher_texte(data_messages)
+                print(data_messages)
 
             if is_transfer_complete:
                 print("Transfer complete")
@@ -275,20 +317,52 @@ def receive_message(client_socket):
             client_socket.close()
             break
 
-def send_message(client_socket, commande):
+
+def send_message(client_socket):
     global INPUT_COMMAND
     global stop_thread
     while True:
-        if stop_thread:
-            break
         try:
-            INPUT_COMMAND = commande
-            if INPUT_COMMAND.lower() == "exit":
+            INPUT_COMMAND = input()
+            if not isinstance(INPUT_COMMAND, list):
+                INPUT_COMMAND = INPUT_COMMAND.split()
+
+            INPUT_COMMAND[0] = INPUT_COMMAND[0].lower()
+            INPUT_COMMAND = ' '.join(INPUT_COMMAND[0:])
+            if INPUT_COMMAND == "exit":
                 stop_thread = True
-            client_socket.sendall(INPUT_COMMAND.lower().encode(FORMAT))
+            if INPUT_COMMAND.startswith("sharefile"):
+                if not isinstance(INPUT_COMMAND, list):
+                    INPUT_COMMAND = INPUT_COMMAND.split()
+
+                if len(INPUT_COMMAND) != 4:
+                    print("Wrong number of parameters.")
+                    continue
+
+                if not os.path.isfile(INPUT_COMMAND[2]):
+                    print(f"File '{INPUT_COMMAND[2]}' does not exist.")
+                    continue
+
+                port = INPUT_COMMAND[3]
+                # checks if port is within reach
+                if int(port) > 65535:
+                    print(f"Port number '{INPUT_COMMAND[3]}' is not valid.")
+                    continue
+
+                file = INPUT_COMMAND[2]
+                # gets size of file
+                file_size = os.path.getsize(file)
+                # converts size of file to human-readable units, a.k.a. KB, MB or GB
+                file_size = convert_bytes(file_size)
+
+                INPUT_COMMAND.append(file_size)
+
+                INPUT_COMMAND = ' '.join(INPUT_COMMAND[0:])
+                print(INPUT_COMMAND)
+
+            client_socket.sendall(INPUT_COMMAND.encode(FORMAT))
         except ConnectionResetError or ConnectionAbortedError:
             afficher_texte("\nDisconnected from the server.")
-            break
 
 
 if __name__ == '__main__':
@@ -298,21 +372,7 @@ if __name__ == '__main__':
         socket = s.socket(s.AF_INET, s.SOCK_STREAM)
         socket.connect((SERVER_HOST, int(SERVER_PORT)))
 
-        afficher_texte("Connected to the server! Type 'signup <username>' to join the chatroom.")
-
-        threading.Thread(target=receive_message, args=(socket,)).start()
         threading.Thread(target=send_message, args=(socket,)).start()
+        threading.Thread(target=receive_message, args=(socket,)).start()
     except KeyboardInterrupt:
         afficher_texte("Closing...")
-
-def executer_commande() : 
-    commande = champ_saisie.get()
-    send_message("client_socket",commande)
-    
-
-# Créer un bouton pour exécuter la commande
-bouton_executer = tk.Button(fenetre, text="Exécuter", command=executer_commande)
-bouton_executer.pack()
-
-# Lancer la boucle d'événements de l'interface graphique
-fenetre.mainloop()
