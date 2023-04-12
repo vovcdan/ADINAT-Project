@@ -21,48 +21,53 @@ can_say_transfer_condition = threading.Condition(transfer_mutex)
 FILE_PATH = ''
 global socket
 global window
-global champ_saisie
-global champ_sortie
+global input_field
+global output
 
 
-# def create_interface(client_socket):
-#     global fenetre
-#     # Créer la fenêtre principale de l'interface graphique
-#     fenetre = tk.Tk()
-#     fenetre.title("Exécuteur de commandes")
-#
-#     # Créer un champ de saisie pour la commande
-#     global champ_saisie
-#     champ_saisie = tk.Entry(fenetre)
-#     champ_saisie.pack()
-#
-#     # Créer une fenêtre de texte pour afficher la sortie de la commande
-#     global champ_sortie
-#     champ_sortie = tk.Text(fenetre)
-#     champ_sortie.pack()
-#
-#     # Lancer la boucle d'événements de l'interface graphique
-#     fenetre.mainloop()
-#
-#     afficher_texte("Connected to the server! Type 'signup <username>' to join the chatroom.")
-#
-#     while True:
-#         if stop_thread:
-#             break
-#         try:
-#             command = champ_saisie.get()
-#             # send_message(client_socket, command)
-#             bouton_executer = tk.Button(fenetre, text="Exécuter", command=send_message(client_socket, command))
-#             # Créer un bouton pour exécuter la commande
-#             bouton_executer.pack()
-#
-#         except ConnectionResetError or ConnectionAbortedError:
-#             print("Disconnected from server.")
-#             break
+def create_interface():
+    global window
+    # Créer la fenêtre principale de l'interface graphique
+    window = tk.Tk()
+    window.title("Super amazing chatroom")
+
+    def on_closing():
+        global stop_thread
+        stop_thread = True
+        socket.close()
+        window.destroy()
+
+    def send_on_enter(event):
+        send_message(socket, input_field.get())
+        input_field.delete(0, tk.END)
+
+    window.protocol("WM_DELETE_WINDOW", on_closing)
+
+    # Créer un champ de saisie pour la commande
+    global input_field
+    input_field = tk.Entry(window)
+    input_field.pack()
+    input_field.focus_set()
+
+    # Créer une fenêtre de texte pour afficher la sortie de la commande
+    global output
+    output = tk.Text(window)
+    output.pack()
+
+    # Créer un bouton pour exécuter la commande
+    button = tk.Button(window, text="Send", command=lambda: send_message(socket, input_field.get()))
+    button.pack()
+
+    window.bind('<Return>', send_on_enter)
+
+    # Lancer la boucle d'événements de l'interface graphique
+    show_text("Connected to the server! Type 'signup <username>' to join the chatroom.")
+    window.mainloop()
 
 
-def afficher_texte(texte):
-    champ_sortie.insert(tk.END, texte + '\n')
+def show_text(text):
+    if window.winfo_exists():
+        output.insert(tk.END, text + '\n')
 
 
 def convert_bytes(size):
@@ -284,6 +289,7 @@ def return_messages_with_data(message):
 
 
 def receive_message(client_socket):
+    global stop_thread
     while not stop_thread:
         try:
             from_server = client_socket.recv(BUFFER_SIZE).decode(FORMAT)
@@ -295,71 +301,71 @@ def receive_message(client_socket):
             if from_server != "200":
                 error_message = return_error_message(from_server)
                 if error_message is not None:
-                    print(error_message)
+                    show_text(error_message)
 
             if from_server == "200":
                 passing_messages = return_passing_messages()
                 if passing_messages is not None:
-                    print(passing_messages)
+                    show_text(passing_messages)
 
             data_messages = return_messages_with_data(from_server)
             if data_messages is not None:
-                print(data_messages)
+                show_text(data_messages)
 
             if is_transfer_complete:
-                print("Transfer complete")
+                show_text("Transfer complete")
                 is_transfer_complete = False
 
         except ConnectionResetError or ConnectionAbortedError:
-            afficher_texte("\nDisconnected from the server.")
-            client_socket.close()
+            show_text("\nDisconnected from the server.")
+            stop_thread = True
+            # client_socket.close()
             break
 
 
-def send_message(client_socket):
+def send_message(client_socket, command):
     global INPUT_COMMAND
     global stop_thread
-    while not stop_thread:
-        try:
-            INPUT_COMMAND = input()
+    try:
+        INPUT_COMMAND = command
+        if not isinstance(INPUT_COMMAND, list):
+            INPUT_COMMAND = INPUT_COMMAND.split()
+        INPUT_COMMAND[0] = INPUT_COMMAND[0].lower()
+        INPUT_COMMAND = ' '.join(INPUT_COMMAND)
+        if INPUT_COMMAND == "exit":
+            stop_thread = True
+        if INPUT_COMMAND.startswith("sharefile"):
             if not isinstance(INPUT_COMMAND, list):
                 INPUT_COMMAND = INPUT_COMMAND.split()
-            INPUT_COMMAND[0] = INPUT_COMMAND[0].lower()
+
+            if len(INPUT_COMMAND) != 4:
+                show_text("Wrong number of parameters.")
+                return
+
+            if not os.path.isfile(INPUT_COMMAND[2]):
+                show_text(f"File '{INPUT_COMMAND[2]}' does not exist.")
+                return
+
+            port = INPUT_COMMAND[3]
+            # checks if port is within reach
+            if int(port) > 65535:
+                show_text(f"Port number '{INPUT_COMMAND[3]}' is not valid.")
+                return
+
+            file = INPUT_COMMAND[2]
+            # gets size of file
+            file_size = os.path.getsize(file)
+            # converts size of file to human-readable units, a.k.a. KB, MB or GB
+            file_size = convert_bytes(file_size)
+
+            INPUT_COMMAND.append(file_size)
             INPUT_COMMAND = ' '.join(INPUT_COMMAND)
-            if INPUT_COMMAND == "exit":
-                stop_thread = True
-            if INPUT_COMMAND.startswith("sharefile"):
-                if not isinstance(INPUT_COMMAND, list):
-                    INPUT_COMMAND = INPUT_COMMAND.split()
 
-                if len(INPUT_COMMAND) != 4:
-                    print("Wrong number of parameters.")
-                    continue
-
-                if not os.path.isfile(INPUT_COMMAND[2]):
-                    print(f"File '{INPUT_COMMAND[2]}' does not exist.")
-                    continue
-
-                port = INPUT_COMMAND[3]
-                # checks if port is within reach
-                if int(port) > 65535:
-                    print(f"Port number '{INPUT_COMMAND[3]}' is not valid.")
-                    continue
-
-                file = INPUT_COMMAND[2]
-                # gets size of file
-                file_size = os.path.getsize(file)
-                # converts size of file to human-readable units, a.k.a. KB, MB or GB
-                file_size = convert_bytes(file_size)
-
-                INPUT_COMMAND.append(file_size)
-                INPUT_COMMAND = ' '.join(INPUT_COMMAND)
-                print(INPUT_COMMAND)
-
-            client_socket.sendall(INPUT_COMMAND.encode(FORMAT))
-        except ConnectionResetError or ConnectionAbortedError:
-            stop_thread = True
-            afficher_texte("\nDisconnected from the server.")
+        client_socket.sendall(INPUT_COMMAND.encode(FORMAT))
+        input_field.delete(0, tk.END)
+    except ConnectionResetError or ConnectionAbortedError:
+        stop_thread = True
+        show_text("\nDisconnected from the server.")
 
 
 if __name__ == '__main__':
@@ -369,7 +375,7 @@ if __name__ == '__main__':
         socket = s.socket(s.AF_INET, s.SOCK_STREAM)
         socket.connect((SERVER_HOST, int(SERVER_PORT)))
 
-        threading.Thread(target=send_message, args=(socket,)).start()
+        threading.Thread(target=create_interface).start()
         threading.Thread(target=receive_message, args=(socket,)).start()
     except KeyboardInterrupt:
-        afficher_texte("Closing...")
+        show_text("Closing...")
