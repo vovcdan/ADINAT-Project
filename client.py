@@ -3,6 +3,7 @@ import socket as s
 import yaml
 import threading
 import tkinter as tk
+from tkinter import scrolledtext
 
 SERVER_HOST = ''
 SERVER_PORT = 0
@@ -45,22 +46,18 @@ def create_interface():
 
     # Créer un champ de saisie pour la commande
     global input_field
-    input_field = tk.Entry(window)
-    input_field.pack()
+    input_field = tk.Entry(window, width=40)
+    input_field.grid(row=1, column=0, padx=5, pady=5)
     input_field.focus_set()
 
     # Créer une fenêtre de texte pour afficher la sortie de la commande
     global output
-    output = tk.Text(window, wrap=tk.WORD)
-    output.pack(fill=tk.BOTH)
-    scrollbar = tk.Scrollbar(output)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    scrollbar.config(command=output.yview)
-    output.config(yscrollcommand=scrollbar.set)
+    output = scrolledtext.ScrolledText(window, width=50, height=20)
+    output.grid(row=0, column=0, padx=5, pady=5, columnspan=2)
 
     # Créer un bouton pour exécuter la commande
     button = tk.Button(window, text="Send", command=lambda: send_message(socket, input_field.get()))
-    button.pack()
+    button.grid(row=1, column=1, padx=5, pady=5)
 
     window.bind('<Return>', send_on_enter)
 
