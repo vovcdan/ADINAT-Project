@@ -26,15 +26,22 @@ global window
 global input_field
 global output
 
+# Configuration des couleurs pour le thème Equilux
+COLOR_BACKGROUND = "#23272a"
+COLOR_TEXT = "white"
+
+COLOR_ERROR = "red"
+COLOR_NORMAL = "white"
+COLOR_INFO = "#7289da"
+COLOR_PV = "#99aab5"
+
 
 def create_interface():
     global window
     # Créer la fenêtre principale de l'interface graphique
     window = tk.Tk()
     window.title("Super amazing chatroom")
-
-    style = ttk.Style()
-    style.theme_use('alt') 
+    window.configure(bg=COLOR_BACKGROUND)
 
     def on_closing():
         global stop_thread
@@ -50,46 +57,45 @@ def create_interface():
 
     # Créer un champ de saisie pour la commande
     global input_field
-    input_field = tk.Entry(window, width=40)
-    input_field.grid(row=1, column=0, padx=5, pady=5)
+    input_field = tk.Entry(window, width=40, bg=COLOR_BACKGROUND, fg=COLOR_TEXT, insertbackground=COLOR_TEXT, font=("Helvetica", 12))
+    input_field.grid(row=1, column=0, padx=5, pady=5, sticky=tk.W+tk.E)
     input_field.focus_set()
 
     # Créer une fenêtre de texte pour afficher la sortie de la commande
     global output
-    output = scrolledtext.ScrolledText(window, width=50, height=20)
-    output.grid(row=0, column=0, padx=5, pady=5, columnspan=2)
+    output = scrolledtext.ScrolledText(window, width=80, height=20, wrap = tk.WORD,bg=COLOR_BACKGROUND, fg=COLOR_TEXT, insertbackground=COLOR_TEXT, font=("Helvetica", 12))
+    output.grid(row=0, column=0, padx=5, pady=5, columnspan=2, sticky=tk.W+tk.E+tk.N+tk.S)
     output.see(tk.END)
 
     # Créer un bouton pour exécuter la commande
-    button = tk.Button(window, text="Send", command=lambda: send_message(socket, input_field.get()), width=10)
-    button.grid(row=1, column=1, padx=5, pady=5)
+    button = tk.Button(window, text="Send", command=lambda: send_message(socket, input_field.get()), width=10, bg=COLOR_BACKGROUND, fg=COLOR_TEXT, font=("Helvetica", 12))
+    button.grid(row=1, column=1, padx=5, pady=5, sticky="E")
 
     window.bind('<Return>', send_on_enter)
+    window.grid_rowconfigure(0, weight=1)
+    window.grid_columnconfigure(0, weight=1)
 
     # Lancer la boucle d'événements de l'interface graphique
-    show_text("Connected to the server! Type 'signup <username>' to join the chatroom.","normal")
+    show_text("Connected to the server! Type 'signup <username>' to join the chatroom.", "normal")
     window.mainloop()
-    output.tag_configure('error', foreground='red')
-
 
 def show_text(text, couleur):
     if window.winfo_exists():
-        if couleur == "rouge":
-            output.insert(tk.END, text + '\n', 'rouge')
-        elif couleur == "bleu":
-            output.insert(tk.END, text + '\n', 'bleu')
-        elif couleur == "vert":
-            output.insert(tk.END, text + '\n', 'vert')
-        elif couleur == "violet":
-            output.insert(tk.END, text + '\n', 'violet')
-        else :
-            output.insert(tk.END, text + '\n')
+        if couleur == "error":
+            output.insert(tk.END, text + '\n', 'error')
+        elif couleur == "info":
+            output.insert(tk.END, text + '\n', 'info')
+        elif couleur == "pv":
+            output.insert(tk.END, text + '\n', 'pv')
+        else:
+            output.insert(tk.END, text + '\n', 'normal')
 
-    output.tag_config('rouge', foreground='red')
-    output.tag_config('bleu', foreground='blue')
-    output.tag_config('vert', foreground='green')
-    output.tag_config('violet', foreground='purple')
+    output.tag_config('error', foreground=COLOR_ERROR)
+    output.tag_config('info', foreground=COLOR_INFO)
+    output.tag_config('pv', foreground=COLOR_PV)
+    output.tag_config('normal',  foreground=COLOR_TEXT)
     output.see(tk.END) #defilement cers le bas
+
 
 
 def convert_bytes(size):
@@ -227,34 +233,34 @@ def return_error_message(error_code):
 def return_passing_messages():
     res = None
     if INPUT_COMMAND[0] == "channel":
-        res = (f"You sent a private channel request to {INPUT_COMMAND[1]}.","bleu")
+        res = (f"You sent a private channel request to {INPUT_COMMAND[1]}.","info")
     if INPUT_COMMAND[0] == "declinechannel":
-        res = (f"You declined {INPUT_COMMAND[1]}'s  private channel request.","violet")
+        res = (f"You declined {INPUT_COMMAND[1]}'s  private channel request.","pv")
     if INPUT_COMMAND[0] == "msgpv":
         mess = ' '.join(INPUT_COMMAND[2:])
-        res = (f"DM to {INPUT_COMMAND[1]}: {mess}","vert")
+        res = (f"DM to {INPUT_COMMAND[1]}: {mess}","pv")
     if INPUT_COMMAND[0] == "sharefile":
-        res = (f"You sent a share file request to {INPUT_COMMAND[1]}.","bleu")
+        res = (f"You sent a share file request to {INPUT_COMMAND[1]}.","info")
         global FILE_PATH, COMMON_PORT, SENDER_HOST
         FILE_PATH = INPUT_COMMAND[2]
         COMMON_PORT = INPUT_COMMAND[3]
         SENDER_HOST = socket.getsockname()[0]
     if INPUT_COMMAND[0] == "acceptchannel":
-        res = (f"You accepted {INPUT_COMMAND[1]}'s  private channel request. You can now DM {INPUT_COMMAND[1]}.","vert")
+        res = (f"You accepted {INPUT_COMMAND[1]}'s  private channel request. You can now DM {INPUT_COMMAND[1]}.","pv")
     if INPUT_COMMAND[0] == "declinefile":
-        res = (f"You declined {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'","violet")
+        res = (f"You declined {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'","pv")
         del pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]
     if INPUT_COMMAND[0] == "acceptfile":
-        res = (f"You accepted {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'","bleu")
+        res = (f"You accepted {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'","info")
         port = pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]['COMMON_PORT']
         host = pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]['SENDER_HOST']
         receive_file_thread = threading.Thread(target=receive_file, args=(INPUT_COMMAND[2], port, host, ))
         receive_file_thread.start()
         receive_file_thread.join()
     if INPUT_COMMAND[0] == "ping":
-        res = (f"You successfully pinged {INPUT_COMMAND[1]}.","bleu")
+        res = (f"You successfully pinged {INPUT_COMMAND[1]}.","info")
     if INPUT_COMMAND[0] == "rename":
-        res = (f"You successfully changed your name to {INPUT_COMMAND[1]}.","bleu")
+        res = (f"You successfully changed your name to {INPUT_COMMAND[1]}.","info")
     if INPUT_COMMAND[0] == "help":
         res = ("signup USERNAME: Sign up and log in to login to the chatroom.\nmsg MESSAGE: Send a message in the " \
               "chatroom.\nmsgpv USERNAME MESSAGE : Send a message to a specific user.\nexit: Leave the server.\nafk : " \
@@ -265,7 +271,7 @@ def return_passing_messages():
               "user.\nacceptchannel USERNAME: Accept the private channel request.\ndeclinechannel USERNAME: Decline " \
               "the private channel request.\nsharefile USERNAME FILE_NAME: Request a file to share with a specific " \
               "user. \nacceptfile USERNAME FILE_NAME: Accept the file to share request.\ndeclinefile USERNAME " \
-              "FILE_NAME: Decline de file to share request. ","bleu")
+              "FILE_NAME: Decline de file to share request. ","info")
     return res
 
 
@@ -273,31 +279,31 @@ def return_messages_with_data(message):
     res = None
     message = message.split("|")
     if message[0].startswith("signup"):
-        res = (f"{message[1]} has joined the chatroom!","bleu")
+        res = (f"{message[1]} has joined the chatroom!","info")
     if message[0].startswith("msgFrom"):
         res = (f"{message[1]}: {message[2]}","normal")
     if message[0].startswith("msgpv"):
-        res = (f"DM from {message[1]}: {message[2]}", "vert")
+        res = (f"DM from {message[1]}: {message[2]}", "pv")
     if message[0].startswith("exited"):
-        res = (f"{message[1]} has left the server.","bleu")
+        res = (f"{message[1]} has left the server.","info")
     if message[0].startswith("afk"):
-        res = (f"{message[1]} is now away from keyboard.","bleu")
+        res = (f"{message[1]} is now away from keyboard.","info")
     if message[0].startswith("btk"):
-        res = (f"{message[1]} is now back to keyboard.","bleu")
+        res = (f"{message[1]} is now back to keyboard.","info")
     if message[0].startswith("users"):
-        res = (f"List of connected users : {message[1]}","bleu")
+        res = (f"List of connected users : {message[1]}","info")
     if message[0].startswith("rename"):
-        res = (f"{message[1]} changed his name to {message[2]}.", "bleu")
+        res = (f"{message[1]} changed his name to {message[2]}.", "info")
     if message[0].startswith("ping"):
-        res = (f"{message[1]} has pinged you!", "bleu")
+        res = (f"{message[1]} has pinged you!", "info")
     if message[0].startswith("channel"):
-        res = (f"{message[1]} requests a private channel with you. Do you accept?","violet")
+        res = (f"{message[1]} requests a private channel with you. Do you accept?","pv")
     if message[0].startswith("acceptedchannel"):
-        res = (f"{message[1]} has accepted your private channel request. You can now DM {message[1]}","vert")
+        res = (f"{message[1]} has accepted your private channel request. You can now DM {message[1]}","pv")
     if message[0].startswith("declinedchannel"):
-        res = (f"{message[1]} has declined your private channel request.","rouge")
+        res = (f"{message[1]} has declined your private channel request.","pv")
     if message[0].startswith("sharefile"):
-        res = (f"{message[1]} requests to share the file '{message[2]}' [{message[3]}] with you on port {message[5]}. Do you accept?","violet")
+        res = (f"{message[1]} requests to share the file '{message[2]}' [{message[3]}] with you on port {message[5]}. Do you accept?","pv")
         global pending_files
         pending_files[(message[1], message[2])] = {'SENDER_HOST': message[4], 'COMMON_PORT': message[5]}
     if message[0].startswith("acceptedfile"):
@@ -306,7 +312,7 @@ def return_messages_with_data(message):
         send_file_thread.start()
         send_file_thread.join()
     if message[0].startswith("declinedfile"):
-        res = (f"{message[1]} declined your transfer for file '{message[2]}'.","rouge")
+        res = (f"{message[1]} declined your transfer for file '{message[2]}'.","error")
     return res
 
 
@@ -323,7 +329,7 @@ def receive_message(client_socket):
             if from_server != "200":
                 error_message = return_error_message(from_server)
                 if error_message is not None:
-                    show_text(error_message, "rouge")
+                    show_text(error_message, "error")
 
             if from_server == "200":
                 passing_messages = return_passing_messages()
@@ -335,11 +341,11 @@ def receive_message(client_socket):
                 show_text(data_messages[0], data_messages[1])
 
             if is_transfer_complete:
-                show_text("Transfer complete", "bleu")
+                show_text("Transfer complete", "info")
                 is_transfer_complete = False
 
         except ConnectionResetError or ConnectionAbortedError:
-            show_text("\nDisconnected from the server.", "bleu")
+            show_text("\nDisconnected from the server.", "info")
             stop_thread = True
             # client_socket.close()
             break
@@ -361,17 +367,17 @@ def send_message(client_socket, command):
                 INPUT_COMMAND = INPUT_COMMAND.split()
 
             if len(INPUT_COMMAND) != 4:
-                show_text("Wrong number of parameters.", "rouge")
+                show_text("Wrong number of parameters.", "error")
                 return
 
             if not os.path.isfile(INPUT_COMMAND[2]):
-                show_text(f"File '{INPUT_COMMAND[2]}' does not exist.", "rouge")
+                show_text(f"File '{INPUT_COMMAND[2]}' does not exist.", "error")
                 return
 
             port = INPUT_COMMAND[3]
             # checks if port is within reach
             if int(port) > 65535:
-                show_text(f"Port number '{INPUT_COMMAND[3]}' is not valid.", "rouge")
+                show_text(f"Port number '{INPUT_COMMAND[3]}' is not valid.", "error")
                 return
 
             file = INPUT_COMMAND[2]
@@ -387,7 +393,7 @@ def send_message(client_socket, command):
         input_field.delete(0, tk.END)
     except ConnectionResetError or ConnectionAbortedError:
         stop_thread = True
-        show_text("\nDisconnected from the server.", "rouge")
+        show_text("\nDisconnected from the server.", "error")
 
 
 if __name__ == '__main__':
@@ -400,4 +406,4 @@ if __name__ == '__main__':
         threading.Thread(target=create_interface).start()
         threading.Thread(target=receive_message, args=(socket,)).start()
     except KeyboardInterrupt:
-        show_text("Closing...", "bleu")
+        show_text("Closing...", "info")
