@@ -51,8 +51,12 @@ def create_interface():
 
     # Créer une fenêtre de texte pour afficher la sortie de la commande
     global output
-    output = tk.Text(window)
-    output.pack()
+    output = tk.Text(window, wrap=tk.WORD)
+    output.pack(fill=tk.BOTH)
+    scrollbar = tk.Scrollbar(output)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    scrollbar.config(command=output.yview)
+    output.config(yscrollcommand=scrollbar.set)
 
     # Créer un bouton pour exécuter la commande
     button = tk.Button(window, text="Send", command=lambda: send_message(socket, input_field.get()))
