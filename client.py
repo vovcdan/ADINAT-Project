@@ -31,7 +31,7 @@ def create_interface():
     global window
     # Créer la fenêtre principale de l'interface graphique
     window = tk.Tk()
-    window.title("Super amazing chatroom")
+    window.title("ADINAT Chatroom Client")
 
     style = ttk.Style()
     style.theme_use('alt') 
@@ -89,7 +89,7 @@ def show_text(text, couleur):
     output.tag_config('bleu', foreground='blue')
     output.tag_config('vert', foreground='green')
     output.tag_config('violet', foreground='purple')
-    output.see(tk.END) #defilement cers le bas
+    output.see(tk.END) #defilement vers le bas
 
 
 def convert_bytes(size):
@@ -255,17 +255,6 @@ def return_passing_messages():
         res = (f"You successfully pinged {INPUT_COMMAND[1]}.","bleu")
     if INPUT_COMMAND[0] == "rename":
         res = (f"You successfully changed your name to {INPUT_COMMAND[1]}.","bleu")
-    if INPUT_COMMAND[0] == "help":
-        res = ("signup USERNAME: Sign up and log in to login to the chatroom.\nmsg MESSAGE: Send a message in the " \
-              "chatroom.\nmsgpv USERNAME MESSAGE : Send a message to a specific user.\nexit: Leave the server.\nafk : " \
-              "Enter afk mode to prevent from sending messages. Note - In this mode, it is possible to only use the " \
-              "'exit' command.\nbtk: Return from afk mode and enter btk mode to send commands and messages once " \
-              "again.\nusers: View the list of connected users.\nrename USERNAME: Change your username.\nping " \
-              "USERNAME: Send a ping to a user.\nchannel USERNAME: Request a private channel with a specific " \
-              "user.\nacceptchannel USERNAME: Accept the private channel request.\ndeclinechannel USERNAME: Decline " \
-              "the private channel request.\nsharefile USERNAME FILE_NAME: Request a file to share with a specific " \
-              "user. \nacceptfile USERNAME FILE_NAME: Accept the file to share request.\ndeclinefile USERNAME " \
-              "FILE_NAME: Decline de file to share request. ","bleu")
     return res
 
 
@@ -301,12 +290,14 @@ def return_messages_with_data(message):
         global pending_files
         pending_files[(message[1], message[2])] = {'SENDER_HOST': message[4], 'COMMON_PORT': message[5]}
     if message[0].startswith("acceptedfile"):
-        res = f"{message[1]} accepted your transfer for file {message[2]}. Transferring..."
+        res = (f"{message[1]} accepted your transfer for file {message[2]}. Transferring...", "info")
         send_file_thread = threading.Thread(target=send_file, args=(FILE_PATH, SENDER_HOST, COMMON_PORT,))
         send_file_thread.start()
         send_file_thread.join()
     if message[0].startswith("declinedfile"):
         res = (f"{message[1]} declined your transfer for file '{message[2]}'.","rouge")
+    if message[0].startswith("helpFromSrv"):
+        res = (f"{message[1]}", "bleu")
     return res
 
 
@@ -355,6 +346,7 @@ def send_message(client_socket, command):
         INPUT_COMMAND[0] = INPUT_COMMAND[0].lower()
         INPUT_COMMAND = ' '.join(INPUT_COMMAND)
         if INPUT_COMMAND == "exit":
+            window.destroy()
             stop_thread = True
         if INPUT_COMMAND.startswith("sharefile"):
             if not isinstance(INPUT_COMMAND, list):

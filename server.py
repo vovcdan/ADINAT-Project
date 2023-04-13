@@ -79,12 +79,18 @@ def broadcast(message):
     :param message: The message to be sent.
     :return:
     """
+    global can_access_data
     with mutex_access_data:
         accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
         for user in clients:
             socket_client = user.socket
             socket_client.sendall(message.encode(FORMAT))
         write_to_log(f"RESPONSE: {message}")
+
+    with mutex_access_data:
+        can_access_data = True
+        accessing_data_condition.notify_all()
 
 
 def unicast(message, socket):
@@ -106,12 +112,20 @@ def is_user_connected(socket):
     :param socket: The socket of the user.
     :return boolean
     """
+    connected = False
+    global can_access_data
     with mutex_access_data:
         accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
         for user in clients:
             if user.socket == socket:
-                return True
-        return False
+                connected = True
+                break
+
+    with mutex_access_data:
+        can_access_data = True
+        accessing_data_condition.notify_all()
+    return connected
 
 
 def is_user_in_clients_list(user):
@@ -121,11 +135,18 @@ def is_user_in_clients_list(user):
     :param user: An user.
     :return boolean
     """
+    connected = False
+    global can_access_data
     with mutex_access_data:
         accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
         if user in clients:
-            return True
-        return False
+            connected = True
+
+    with mutex_access_data:
+        can_access_data = True
+        accessing_data_condition.notify_all()
+    return connected
 
 
 def is_username_connected(username):
@@ -135,12 +156,19 @@ def is_username_connected(username):
     :param username: An username.
     :return boolean
     """
+    connected = False
+    global can_access_data
     with mutex_access_data:
         accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
         # we create a new list of usernames and if the username given is in that list we send a code error
         if username in [client.username for client in clients]:
-            return True
-        return False
+            connected = True
+
+    with mutex_access_data:
+        can_access_data = True
+        accessing_data_condition.notify_all()
+    return connected
 
 
 def find_user_by_socket(socket):
@@ -150,12 +178,20 @@ def find_user_by_socket(socket):
     :param socket: The socket of the user.
     :return user
     """
+    get_user = None
+    global can_access_data
     with mutex_access_data:
         accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
         for user in clients:
             if user.socket == socket:
-                return user
-        return None
+                get_user = user
+                break
+
+    with mutex_access_data:
+        can_access_data = True
+        accessing_data_condition.notify_all()
+    return get_user
 
 
 def find_user_by_username(username):
@@ -165,12 +201,20 @@ def find_user_by_username(username):
     :param username: Username of the user.
     :return user
     """
+    get_user = None
+    global can_access_data
     with mutex_access_data:
         accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
         for user in clients:
             if user.username == username:
-                return user
-        return None
+                get_user = user
+                break
+
+    with mutex_access_data:
+        can_access_data = True
+        accessing_data_condition.notify_all()
+    return get_user
 
 
 def find_socket(username):
@@ -180,12 +224,20 @@ def find_socket(username):
     :param username: Username of the user.
     :return socket
     """
+    get_socket = None
+    global can_access_data
     with mutex_access_data:
         accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
         for user in clients:
             if user.username == username:
-                return user.socket
-        return None
+                get_socket = user.socket
+                break
+
+    with mutex_access_data:
+        can_access_data = True
+        accessing_data_condition.notify_all()
+    return get_socket
 
 
 def remove_user(socket):
@@ -233,17 +285,24 @@ def signup(socket, message):
         unicast("403", socket)
         return
 
+    global can_access_data
     with mutex_access_data:
         accessing_data_condition.wait_for(lambda: can_access_data)
+        can_access_data = False
     # checks if user is already logged in and if username is already taken
         for user in clients:
             if user.socket == socket and user.state is not None:
+                can_access_data = True
+                accessing_data_condition.notify_all()
                 unicast("417", socket)
                 return
             if message[1] == user.username:
+                can_access_data = True
+                accessing_data_condition.notify_all()
                 unicast("425", socket)
                 return
 
+        can_access_data = True
         accessing_data_condition.notify_all()
 
     # checks if username contains special characters or numbers
@@ -522,13 +581,19 @@ def users_from_server(socket):
         global can_access_data
         with mutex_access_data:
             accessing_data_condition.wait_for(lambda: can_access_data)
+            can_access_data = False
             res = "usersFromSrv|["
             for user in clients:
                 res += f"{user.username}, "
             res = res[:-2]
             res += "]"
-            unicast(res, socket)
-            unicast("200", socket)
+
+        with mutex_access_data:
+            can_access_data = True
+            accessing_data_condition.notify_all()
+
+        unicast(res, socket)
+        unicast("200", socket)
     except s.error:
         unicast("500", socket)
 
@@ -662,6 +727,7 @@ def rename_from_server(user, new_username, socket):
         global can_access_data
         with mutex_access_data:
             accessing_data_condition.wait_for(lambda: can_access_data)
+            can_access_data = False
             for user in clients:
                 if old_username in user.friends:
                     user.remove_friends(old_username)
@@ -670,6 +736,10 @@ def rename_from_server(user, new_username, socket):
                 if old_username in user.pending_friends:
                     user.remove_pending_friends(old_username)
                     user.add_pending_friends(new_username)
+
+        with mutex_access_data:
+            can_access_data = True
+            accessing_data_condition.notify_all()
 
         broadcast(f"renameFromSrv|{old_username}|{new_username}")
         unicast("200", socket)
@@ -1248,7 +1318,7 @@ def declinefile(socket, message):
     user = find_user_by_socket(socket)
 
     # checks if user is connected
-    if is_user_in_clients_list(user):
+    if not is_user_in_clients_list(user):
         unicast("418", socket)
         return
 
@@ -1318,6 +1388,16 @@ def help_command(socket, message):
         return
 
     unicast("200", socket)
+    unicast("helpFromSrv|signup USERNAME: Sign up and log in to login to the chatroom.\nmsg MESSAGE: Send a message in the "
+            "chatroom.\nmsgpv USERNAME MESSAGE : Send a message to a specific user.\nexit: Leave the server.\nafk : "
+            "Enter afk mode to prevent from sending messages. Note - In this mode, it is possible to only use the "
+            "'exit' command.\nbtk: Return from afk mode and enter btk mode to send commands and messages once "
+            "again.\nusers: View the list of connected users.\nrename USERNAME: Change your username.\nping "
+            "USERNAME: Send a ping to a user.\nchannel USERNAME: Request a private channel with a specific "
+            "user.\nacceptchannel USERNAME: Accept the private channel request.\ndeclinechannel USERNAME: Decline "
+            "the private channel request.\nsharefile USERNAME FILE_NAME: Request a file to share with a specific "
+            "user. \nacceptfile USERNAME FILE_NAME: Accept the file to share request.\ndeclinefile USERNAME "
+            "FILE_NAME: Decline de file to share request.", socket)
 
 
 def process_client(client_socket, client_address):
