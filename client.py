@@ -19,22 +19,37 @@ transfer_mutex = threading.Lock()
 can_say_transfer_condition = threading.Condition(transfer_mutex)
 FILE_PATH = ''
 global socket
+global champ_sortie
 
-# Créer la fenêtre principale de l'interface graphique
-fenetre = tk.Tk()
-fenetre.title("Exécuteur de commandes")
+def create_window() :
+    # Créer la fenêtre principale de l'interface graphique
+    fenetre = tk.Tk()
+    fenetre.title("Exécuteur de commandes")
 
-# Créer un champ de saisie pour la commande
-champ_saisie = tk.Entry(fenetre)
-champ_saisie.pack()
+    # Créer un champ de saisie pour la commande
+    champ_saisie = tk.Entry(fenetre)
+    champ_saisie.pack()
 
-# Créer une fenêtre de texte pour afficher la sortie de la commande
-champ_sortie = tk.Text(fenetre)
-champ_sortie.pack()
+    # Créer une fenêtre de texte pour afficher la sortie de la commande
+    global champ_sortie
+    champ_sortie = tk.Text(fenetre)
+    champ_sortie.pack()
+
+    # Créer un bouton pour exécuter la commande
+    def cliquer():
+        while True :
+            if bouton_executer.click == False:
+                pass
+            else :
+                send_message(socket, champ_saisie.get())
+    bouton_executer = tk.Button(fenetre, text="Exécuter", command=cliquer)
+    bouton_executer.pack()
+
+    # Lancer la boucle d'événements de l'interface graphique
+    fenetre.mainloop()
 
 def afficher_texte(texte):
     champ_sortie.insert(tk.END, texte + '\n') 
-
 
 def send_file(path, sender_host, port):
     server_socket = s.socket(s.AF_INET, s.SOCK_STREAM)
@@ -298,21 +313,11 @@ if __name__ == '__main__':
         socket = s.socket(s.AF_INET, s.SOCK_STREAM)
         socket.connect((SERVER_HOST, int(SERVER_PORT)))
 
-        afficher_texte("Connected to the server! Type 'signup <username>' to join the chatroom.")
 
         threading.Thread(target=receive_message, args=(socket,)).start()
         threading.Thread(target=send_message, args=(socket,)).start()
+        afficher_texte("Connected to the server! Type 'signup <username>' to join the chatroom.")
     except KeyboardInterrupt:
         afficher_texte("Closing...")
-
-def executer_commande() : 
-    commande = champ_saisie.get()
-    send_message("client_socket",commande)
     
 
-# Créer un bouton pour exécuter la commande
-bouton_executer = tk.Button(fenetre, text="Exécuter", command=executer_commande)
-bouton_executer.pack()
-
-# Lancer la boucle d'événements de l'interface graphique
-fenetre.mainloop()
