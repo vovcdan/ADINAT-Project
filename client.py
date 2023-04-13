@@ -40,7 +40,8 @@ def create_interface():
     global window
     # Créer la fenêtre principale de l'interface graphique
     window = tk.Tk()
-    window.title("Super amazing chatroom")
+
+    window.title("ADINAT Chatroom Client")
     window.configure(bg=COLOR_BACKGROUND)
 
     def on_closing():
@@ -94,8 +95,7 @@ def show_text(text, couleur):
     output.tag_config('info', foreground=COLOR_INFO)
     output.tag_config('pv', foreground=COLOR_PV)
     output.tag_config('normal',  foreground=COLOR_TEXT)
-    output.see(tk.END) #defilement cers le bas
-
+    output.see(tk.END) #defilement vers le bas
 
 
 def convert_bytes(size):
@@ -240,7 +240,7 @@ def return_passing_messages():
         mess = ' '.join(INPUT_COMMAND[2:])
         res = (f"DM to {INPUT_COMMAND[1]}: {mess}","pv")
     if INPUT_COMMAND[0] == "sharefile":
-        res = (f"You sent a share file request to {INPUT_COMMAND[1]}.","info")
+        res = (f"You sent a share file request to {INPUT_COMMAND[1]}.","pv")
         global FILE_PATH, COMMON_PORT, SENDER_HOST
         FILE_PATH = INPUT_COMMAND[2]
         COMMON_PORT = INPUT_COMMAND[3]
@@ -251,7 +251,7 @@ def return_passing_messages():
         res = (f"You declined {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'","pv")
         del pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]
     if INPUT_COMMAND[0] == "acceptfile":
-        res = (f"You accepted {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'","info")
+        res = (f"You accepted {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'","pv")
         port = pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]['COMMON_PORT']
         host = pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]['SENDER_HOST']
         receive_file_thread = threading.Thread(target=receive_file, args=(INPUT_COMMAND[2], port, host, ))
@@ -261,17 +261,6 @@ def return_passing_messages():
         res = (f"You successfully pinged {INPUT_COMMAND[1]}.","info")
     if INPUT_COMMAND[0] == "rename":
         res = (f"You successfully changed your name to {INPUT_COMMAND[1]}.","info")
-    if INPUT_COMMAND[0] == "help":
-        res = ("signup USERNAME: Sign up and log in to login to the chatroom.\nmsg MESSAGE: Send a message in the " \
-              "chatroom.\nmsgpv USERNAME MESSAGE : Send a message to a specific user.\nexit: Leave the server.\nafk : " \
-              "Enter afk mode to prevent from sending messages. Note - In this mode, it is possible to only use the " \
-              "'exit' command.\nbtk: Return from afk mode and enter btk mode to send commands and messages once " \
-              "again.\nusers: View the list of connected users.\nrename USERNAME: Change your username.\nping " \
-              "USERNAME: Send a ping to a user.\nchannel USERNAME: Request a private channel with a specific " \
-              "user.\nacceptchannel USERNAME: Accept the private channel request.\ndeclinechannel USERNAME: Decline " \
-              "the private channel request.\nsharefile USERNAME FILE_NAME: Request a file to share with a specific " \
-              "user. \nacceptfile USERNAME FILE_NAME: Accept the file to share request.\ndeclinefile USERNAME " \
-              "FILE_NAME: Decline de file to share request. ","info")
     return res
 
 
@@ -307,12 +296,14 @@ def return_messages_with_data(message):
         global pending_files
         pending_files[(message[1], message[2])] = {'SENDER_HOST': message[4], 'COMMON_PORT': message[5]}
     if message[0].startswith("acceptedfile"):
-        res = f"{message[1]} accepted your transfer for file {message[2]}. Transferring..."
+        res = (f"{message[1]} accepted your transfer for file {message[2]}. Transferring...", "pv")
         send_file_thread = threading.Thread(target=send_file, args=(FILE_PATH, SENDER_HOST, COMMON_PORT,))
         send_file_thread.start()
         send_file_thread.join()
     if message[0].startswith("declinedfile"):
-        res = (f"{message[1]} declined your transfer for file '{message[2]}'.","error")
+        res = (f"{message[1]} declined your transfer for file '{message[2]}'.","pv")
+    if message[0].startswith("helpFromSrv"):
+        res = (f"{message[1]}", "info")
     return res
 
 
@@ -361,6 +352,7 @@ def send_message(client_socket, command):
         INPUT_COMMAND[0] = INPUT_COMMAND[0].lower()
         INPUT_COMMAND = ' '.join(INPUT_COMMAND)
         if INPUT_COMMAND == "exit":
+            window.destroy()
             stop_thread = True
         if INPUT_COMMAND.startswith("sharefile"):
             if not isinstance(INPUT_COMMAND, list):
