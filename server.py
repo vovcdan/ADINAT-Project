@@ -880,10 +880,10 @@ def acceptchannel(socket, message):
         unicast("404", socket)
         return
 
-    # checks if the user has any channel requests
-    if len(user.pending_friends) == 0:
-        unicast("440", socket)
-        return
+    # # checks if the user has any channel requests
+    # if len(user.pending_friends) == 0:
+    #     unicast("440", socket)
+    #     return
 
     # checks if the username given in the parameter is in the user's pending friends request
     if targeted_user.username not in user.pending_friends:
@@ -985,10 +985,10 @@ def declinechannel(socket, message):
         unicast("404", socket)
         return
 
-    # checks if the user has any channel requests
-    if len(user.pending_friends) == 0:
-        unicast("440", socket)
-        return
+    # # checks if the user has any channel requests
+    # if len(user.pending_friends) == 0:
+    #     unicast("440", socket)
+    #     return
 
     # checks if the username given in the parameter is in the user's pending friends request
     if targeted_user.username not in user.pending_friends:
@@ -1243,10 +1243,10 @@ def acceptfile(socket, message):
         unicast("402", socket)
         return
 
-    # checks if user has any pending files requests
-    if len(user.pending_files) == 0:
-        unicast("443", socket)
-        return
+    # # checks if user has any pending files requests
+    # if len(user.pending_files) == 0:
+    #     unicast("445", socket)
+    #     return
 
     targeted_user = find_user_by_username(message[1])
 
@@ -1260,7 +1260,7 @@ def acceptfile(socket, message):
 
     # checks if the username given in the parameter is present in the user's pending files request list
     if message[1] not in user.pending_files[0]:
-        unicast("445", socket)
+        unicast("443", socket)
         return
 
     # checks if the username and the file given in the parameters correspond with userB's share file request
@@ -1332,9 +1332,9 @@ def declinefile(socket, message):
         unicast("402", socket)
         return
 
-    if len(user.pending_files) == 0:
-        unicast("443", socket)
-        return
+    # if len(user.pending_files) == 0:
+    #     unicast("445", socket)
+    #     return
 
     targeted_user = find_user_by_username(message[1])
 
@@ -1342,7 +1342,7 @@ def declinefile(socket, message):
 
     # checks if the username given in the parameter is present in the user's pending files request list
     if message[1] not in user.pending_files[0]:
-        unicast("445", socket)
+        unicast("443", socket)
         return
 
     # checks if the username and the file given in the parameters correspond with userB's share file request

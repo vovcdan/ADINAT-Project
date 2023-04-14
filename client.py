@@ -218,11 +218,11 @@ def return_error_message(error_code):
     if error_code == "442":
         res = f"You have already issued a file transfer request with the file '{INPUT_COMMAND[2]}' to {INPUT_COMMAND[1]}."
     if error_code == "443":
-        res = f"You don't have any pending file share requests."
+        res = f"You have no pending share file request from {INPUT_COMMAND[1]}."
     if error_code == "444":
         res = f"You have no pending private channel request from {INPUT_COMMAND[1]}."
     if error_code == "445":
-        res = f"You have no pending share file request from {INPUT_COMMAND[1]}."
+        res = f"You have no pending share file requests."
     if error_code == "446":
         res = f"Port number '{INPUT_COMMAND[1]}' is not valid."
     if error_code == "500":
