@@ -251,13 +251,27 @@ def remove_user(socket):
         accessing_data_condition.wait_for(lambda: can_access_data)
         can_access_data = False
         index = None
+        username = None
         for i, user in enumerate(clients):
             if user.socket == socket:
                 index = i
+                username = user.username
                 break
 
         if index is not None:
             del clients[index]
+
+        if username is not None:
+            for user in clients:
+                if username in user.pending_friends:
+                    user.remove_pending_friends(username)
+
+                if username in user.friends:
+                    user.remove_friends(username)
+
+                for tuple in user.pending_files:
+                    if username in tuple[0]:
+                        user.pending_files = [tup for tup in user.pending_files if tup[0] != username]
 
     with mutex_access_data:
         can_access_data = True
@@ -804,6 +818,11 @@ def channel(socket, message):
     # checks if the user has already sent a channel request to the targeted user
     if user.username in targeted_user.pending_friends:
         unicast("441", socket)
+        return
+
+    # checks if the targeted user has already sent a request to the user
+    if targeted_user.username in user.pending_friends:
+        unicast("447", socket)
         return
 
     channel_from_server(user, targeted_user)

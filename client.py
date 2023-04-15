@@ -189,11 +189,11 @@ def return_error_message(error_code):
     if error_code == "403":
         res = "Wrong number of parameters."
     if error_code == "404":
-        res = f"Private channel with user '{INPUT_COMMAND[1]}' already exists."
+        res = f"Private channel with {INPUT_COMMAND[1]} already exists."
     if error_code == "405":
         res = f"File '{INPUT_COMMAND[2]}' does not exist."
     if error_code == "406":
-        res = f"The file name '{INPUT_COMMAND[2]}' isn't corresponding with the file name given by user '{INPUT_COMMAND[1]}'."
+        res = f"The file name '{INPUT_COMMAND[2]}' isn't corresponding with the file name given by {INPUT_COMMAND[1]}."
     if error_code == "407":
         res = f"You are not authorized to issue the command '{INPUT_COMMAND[0]}' to yourself."
     if error_code == "415":
@@ -205,9 +205,9 @@ def return_error_message(error_code):
     if error_code == "418":
         res = f"You must be logged in to input the command '{INPUT_COMMAND[0]}'."
     if error_code == "421":
-        res = f"You must first issue a private channel request from '{INPUT_COMMAND[1]}' in order to private message him."
+        res = f"You must first issue a private channel request from {INPUT_COMMAND[1]} in order to private message him."
     if error_code == "425":
-        res = f"Username '{INPUT_COMMAND[1]}' is already taken by another user. Input the command 'signup USERNAME' once again with another username. "
+        res = f"Username '{INPUT_COMMAND[1]}' is already taken by another user. Input the command '/signup USERNAME' once again with another username. "
     if error_code == "426":
         res = "Username must not contain any special characters or numbers."
     if error_code == "430":
@@ -226,6 +226,8 @@ def return_error_message(error_code):
         res = f"You have no pending share file requests."
     if error_code == "446":
         res = f"Port number '{INPUT_COMMAND[1]}' is not valid."
+    if error_code == "447":
+        res = f"You already have a private channel request from {INPUT_COMMAND[1]}."
     if error_code == "500":
         res = "Internal server error."
     return res
@@ -247,7 +249,7 @@ def return_passing_messages():
         COMMON_PORT = INPUT_COMMAND[3]
         SENDER_HOST = socket.getsockname()[0]
     if INPUT_COMMAND[0] == "acceptchannel":
-        res = (f"You accepted {INPUT_COMMAND[1]}'s  private channel request. You can now DM {INPUT_COMMAND[1]}.","pv")
+        res = (f"You accepted {INPUT_COMMAND[1]}'s  private channel request. You can now private message {INPUT_COMMAND[1]}.","pv")
     if INPUT_COMMAND[0] == "declinefile":
         res = (f"You declined {INPUT_COMMAND[1]}'s share file request for the file '{INPUT_COMMAND[2]}'","pv")
         del pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]
@@ -291,7 +293,7 @@ def return_messages_with_data(message):
     if message[0].startswith("channel"):
         res = (f"{message[1]} requests a private channel with you. Do you accept?","pv")
     if message[0].startswith("acceptedchannel"):
-        res = (f"{message[1]} has accepted your private channel request. You can now DM {message[1]}","pv")
+        res = (f"{message[1]} has accepted your private channel request. You can now private message {message[1]}.","pv")
     if message[0].startswith("declinedchannel"):
         res = (f"{message[1]} has declined your private channel request.","pv")
     if message[0].startswith("sharefile"):
