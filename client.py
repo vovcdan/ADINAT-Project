@@ -37,6 +37,10 @@ COLOR_PV = "#99aab5"
 
 
 def create_interface():
+    """
+    Creates the interface for the user.
+    :return:
+    """
     global window
     # Créer la fenêtre principale de l'interface graphique
     window = tk.Tk()
@@ -45,12 +49,20 @@ def create_interface():
     window.configure(bg=COLOR_BACKGROUND)
 
     def on_closing():
+        """
+        Executes this function when closing the interface.
+        :return:
+        """
         global stop_thread
         stop_thread = True
         socket.close()
         window.destroy()
 
-    def send_on_enter(event):
+    def send_on_enter():
+        """
+        Executes the send_message function when clicking on the 'Enter' key.
+        :return:
+        """
         send_message(socket, input_field.get())
         input_field.delete(0, tk.END)
 
@@ -82,6 +94,16 @@ def create_interface():
 
 
 def show_text(text, couleur):
+    """
+    Shows the text on the interface based on its degree.
+    If the text is an error (code error), the text will be red.
+    If the text is informational(code info), the text will be blue.
+    If the text informs of private exchanges between another user (code pv), the text will be green.
+    Otherwise (code normal), the text will be white.
+    :param text: The text to be shown.
+    :param couleur: The color code of the text.
+    :return:
+    """
     if window.winfo_exists():
         if couleur == "error":
             output.insert(tk.END, text + '\n', 'error')
@@ -113,6 +135,13 @@ def convert_bytes(size):
 
 
 def send_file(path, sender_host, port):
+    """
+    Sends a file to another host by creating a socket and waiting for a connection.
+    As soon as the connection is established, the file will start transferring.
+    :param path: Path of the file to be transferred.
+    :param sender_host: IP address of the person sending the file (localhost).
+    :param port: Port number to be used to make the transfer.
+    """
     server_socket = s.socket(s.AF_INET, s.SOCK_STREAM)
     server_socket.bind((sender_host, int(port)))
     server_socket.listen(1)
@@ -141,6 +170,13 @@ def send_file(path, sender_host, port):
 
 
 def receive_file(filename, port, sender_host):
+    """
+    Receives a file from another host by creating a socket and connecting to the sender.
+    As soon as the connection is established, the file will start transferring.
+    :param filename: Name of the file to be transferred.
+    :param port: Port number to be used for transfer.
+    :param sender_host: IP address of the sender.
+    """
     client_socket = s.socket(s.AF_INET, s.SOCK_STREAM)
     client_socket.connect((sender_host, int(port)))
 
@@ -167,6 +203,9 @@ def receive_file(filename, port, sender_host):
 
 
 def read_from_config():
+    """
+    Reads and affects the necessary values in order to connect to the ADINAT server, such as its IP address and the port it listens on.
+    """
     with open('adinat_config.yaml', 'r') as config_file:
         config = yaml.load(config_file, Loader=yaml.FullLoader)
 
@@ -179,6 +218,11 @@ def read_from_config():
 
 
 def return_error_message(error_code):
+    """
+    Translates the error codes received from the server into human-readable messages.
+    :param error_code: Return code from the server.
+    :return: Message associated with the code error.
+    """
     res = None
     if error_code == "400":
         res = f"The command '{INPUT_COMMAND[0]}' does not exist."
@@ -234,6 +278,10 @@ def return_error_message(error_code):
 
 
 def return_passing_messages():
+    """
+    Returns an informational message when the user issues a command to the server.
+    :return: A tuple with the message and the text code for the interface.
+    """
     res = None
     if INPUT_COMMAND[0] == "channel":
         res = (f"You sent a private channel request to {INPUT_COMMAND[1]}.","info")
@@ -270,6 +318,11 @@ def return_passing_messages():
 
 
 def return_messages_with_data(message):
+    """
+    Translates the data received from the ADINAT server into human-readable messages.
+    :param message: Data received from the server.
+    :return: A tuple containing the message associated with the data and the text code for the interface.
+    """
     res = None
     message = message.split("|")
     if message[0].startswith("signup"):
@@ -313,6 +366,11 @@ def return_messages_with_data(message):
 
 
 def receive_message(client_socket):
+    """
+    Receives a message from the server.
+    Depending on the message, certain functions may be called in order to properly show the text in the interface.
+    :param client_socket: Socket of the user.
+    """
     global stop_thread
     while not stop_thread:
         try:
@@ -348,6 +406,13 @@ def receive_message(client_socket):
 
 
 def process_message(message):
+    """
+    Process the message written by the user before sending it to the ADINAT server.
+    If the user input '/' before the message, it will be sent as a command to the server.
+    Otherwise, all messages will be interpreted as the 'msg' command.
+    :param message: The message written by the user.
+    :return: Message to be sent to the server.
+    """
     if message == "" or message.isspace():
         return None
     if message.startswith("/"):
@@ -357,6 +422,13 @@ def process_message(message):
 
 
 def send_message(client_socket, command):
+    """
+    Sends a message to the ADINAT server.
+    If the message is the sharefile command, certain tests will be performed (to see if the file to be sent exists, or if the port number is valid)
+    If the message is the exit command, the application will stop.
+    :param client_socket: Socket of the client.
+    :param command: The message to be sent to the server.
+    """
     global INPUT_COMMAND
     global stop_thread
     try:

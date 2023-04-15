@@ -271,6 +271,8 @@ def remove_user(socket):
 
                 for tuple in user.pending_files:
                     if username in tuple[0]:
+                        # create a new list of tuples without the tuple that contains the username
+                        # sets the new list to the user
                         user.pending_files = [tup for tup in user.pending_files if tup[0] != username]
 
     with mutex_access_data:
