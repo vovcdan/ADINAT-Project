@@ -77,8 +77,9 @@ def create_interface():
     window.grid_columnconfigure(0, weight=1)
 
     # Lancer la boucle d'événements de l'interface graphique
-    show_text("Connected to the server! Type 'signup <username>' to join the chatroom.", "normal")
+    show_text("Connected to the server! Type '/signup <username>' to join the chatroom. Type '/help' for additional information.", "normal")
     window.mainloop()
+
 
 def show_text(text, couleur):
     if window.winfo_exists():
@@ -95,7 +96,7 @@ def show_text(text, couleur):
     output.tag_config('info', foreground=COLOR_INFO)
     output.tag_config('pv', foreground=COLOR_PV)
     output.tag_config('normal',  foreground=COLOR_TEXT)
-    output.see(tk.END) #defilement vers le bas
+    output.see(tk.END)  # defilement vers le bas
 
 
 def convert_bytes(size):
@@ -261,6 +262,8 @@ def return_passing_messages():
         res = (f"You successfully pinged {INPUT_COMMAND[1]}.","info")
     if INPUT_COMMAND[0] == "rename":
         res = (f"You successfully changed your name to {INPUT_COMMAND[1]}.","info")
+    if INPUT_COMMAND[0] == "help":
+        res = (f"All commands must start with the character '/'.", "info")
     return res
 
 
@@ -342,15 +345,29 @@ def receive_message(client_socket):
             break
 
 
+def process_message(message):
+    if message == "" or message.isspace():
+        return None
+    if message.startswith("/"):
+        return message[1:]
+    else:
+        return "msg " + message
+
+
 def send_message(client_socket, command):
     global INPUT_COMMAND
     global stop_thread
     try:
-        INPUT_COMMAND = command
+        INPUT_COMMAND = process_message(command)
+        if INPUT_COMMAND is None:
+            input_field.delete(0, tk.END)
+            return
         if not isinstance(INPUT_COMMAND, list):
             INPUT_COMMAND = INPUT_COMMAND.split()
+
         INPUT_COMMAND[0] = INPUT_COMMAND[0].lower()
         INPUT_COMMAND = ' '.join(INPUT_COMMAND)
+        print(INPUT_COMMAND)
         if INPUT_COMMAND == "exit":
             window.destroy()
             stop_thread = True

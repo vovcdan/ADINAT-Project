@@ -368,8 +368,7 @@ def msg(socket, message):
         unicast("418", socket)
         return
 
-    if mess == "":
-        unicast("403", socket)
+    if mess == "" or mess.isspace():
         return
 
     # checks if user's state is afk
