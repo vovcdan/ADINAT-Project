@@ -16,6 +16,7 @@ DOWNLOADS_PATH = ''
 global SENDER_HOST
 global COMMON_PORT
 pending_files = {}
+sent_requests = {}
 is_transfer_complete = False
 can_say_transfer_complete = True
 transfer_mutex = threading.Lock()
@@ -132,6 +133,17 @@ def convert_bytes(size):
         if size < 1024.0:
             return "%3.1f%s" % (size, x)
         size /= 1024.0
+
+
+def is_port_available(port):
+    if port > 65535:
+        return False
+    try:
+        some_socket = s.socket(s.AF_INET, s.SOCK_STREAM)
+        some_socket.bind((socket.getsockname()[0], port))
+    except s.error:
+        return False
+    return True
 
 
 def send_file(path, sender_host, port):
@@ -296,6 +308,14 @@ def return_passing_messages():
         FILE_PATH = INPUT_COMMAND[2]
         COMMON_PORT = INPUT_COMMAND[3]
         SENDER_HOST = socket.getsockname()[0]
+        file = INPUT_COMMAND[2]
+        if "\\" in INPUT_COMMAND[2]:
+            file = INPUT_COMMAND[2].split("\\")
+            file = file[-1]
+        elif "/" in INPUT_COMMAND[2]:
+            file = INPUT_COMMAND[2].split("/")
+            file = file[-1]
+        sent_requests[(INPUT_COMMAND[1], file)] = {'SENDER_HOST': socket.getsockname()[0], 'COMMON_PORT': INPUT_COMMAND[3], 'FILE_PATH': INPUT_COMMAND[2]}
     if INPUT_COMMAND[0] == "acceptchannel":
         res = (f"You accepted {INPUT_COMMAND[1]}'s  private channel request. You can now private message {INPUT_COMMAND[1]}.","pv")
     if INPUT_COMMAND[0] == "declinefile":
@@ -308,6 +328,7 @@ def return_passing_messages():
         receive_file_thread = threading.Thread(target=receive_file, args=(INPUT_COMMAND[2], port, host, ))
         receive_file_thread.start()
         receive_file_thread.join()
+        del pending_files[(INPUT_COMMAND[1], INPUT_COMMAND[2])]
     if INPUT_COMMAND[0] == "ping":
         res = (f"You successfully pinged {INPUT_COMMAND[1]}.","info")
     if INPUT_COMMAND[0] == "rename":
@@ -355,10 +376,15 @@ def return_messages_with_data(message):
         pending_files[(message[1], message[2])] = {'SENDER_HOST': message[4], 'COMMON_PORT': message[5]}
     if message[0].startswith("acceptedfile"):
         res = (f"{message[1]} accepted your transfer for file {message[2]}. Transferring...", "pv")
-        send_file_thread = threading.Thread(target=send_file, args=(FILE_PATH, SENDER_HOST, COMMON_PORT,))
+        host = sent_requests[(message[1], message[2])]['SENDER_HOST']
+        port = sent_requests[(message[1], message[2])]['COMMON_PORT']
+        filepath = sent_requests[(message[1], message[2])]['FILE_PATH']
+        send_file_thread = threading.Thread(target=send_file, args=(filepath, host, port,))
         send_file_thread.start()
         send_file_thread.join()
+        del sent_requests[(message[1], message[2])]
     if message[0].startswith("declinedfile"):
+        del sent_requests[(message[1], message[2])]
         res = (f"{message[1]} declined your transfer for file '{message[2]}'.","pv")
     if message[0].startswith("helpFromSrv"):
         res = (f"{message[1]}", "info")
@@ -459,7 +485,7 @@ def send_message(client_socket, command):
 
             port = INPUT_COMMAND[3]
             # checks if port is within reach
-            if int(port) > 65535:
+            if not is_port_available(int(port)):
                 show_text(f"Port number '{INPUT_COMMAND[3]}' is not valid.", "error")
                 return
 
