@@ -58,7 +58,7 @@ def create_interface():
         socket.close()
         window.destroy()
 
-    def send_on_enter():
+    def send_on_enter(event):
         """
         Executes the send_message function when clicking on the 'Enter' key.
         :return:
