@@ -27,6 +27,7 @@ global socket
 global window
 global input_field
 global output
+global nickname
 
 # Configuration des couleurs pour le thème Equilux
 COLOR_BACKGROUND = "#23272a"
@@ -296,10 +297,11 @@ def return_passing_messages():
     :return: A tuple with the message and the text code for the interface.
     """
     res = None
+    global nickname
     if INPUT_COMMAND[0] == "channel":
         res = (f"You sent a private channel request to {INPUT_COMMAND[1]}.","info")
     if INPUT_COMMAND[0] == "declinechannel":
-        res = (f"You declined {INPUT_COMMAND[1]}'s  private channel request.","pv")
+        res = (f"You declined {INPUT_COMMAND[1]}'s private channel request.","pv")
     if INPUT_COMMAND[0] == "msgpv":
         mess = ' '.join(INPUT_COMMAND[2:])
         res = (f"DM to {INPUT_COMMAND[1]}: {mess}","pv")
@@ -336,6 +338,18 @@ def return_passing_messages():
         res = (f"You successfully changed your name to {INPUT_COMMAND[1]}.","info")
     if INPUT_COMMAND[0] == "help":
         res = (f"All commands must start with the character '/'.", "info")
+    if INPUT_COMMAND[0] == "msg":
+        res = (f"(You) {nickname}: {INPUT_COMMAND[1]}", "normal")
+    if INPUT_COMMAND[0] == "signup":
+        nickname = INPUT_COMMAND[1]
+        res = (f"You successfully joined the chatroom!", "info")
+    if INPUT_COMMAND[0] == "rename":
+        res = (f"You changed your name from {nickname} to {INPUT_COMMAND[1]}.", "info")
+        nickname = INPUT_COMMAND[1]
+    if INPUT_COMMAND[0] == "afk":
+        res = (f"You are now away from keyboard.", "info")
+    if INPUT_COMMAND[0] == "btk":
+        res = (f"You are now back to keyboard", "info")
     return res
 
 
@@ -404,7 +418,7 @@ def receive_message(client_socket):
             from_server = client_socket.recv(BUFFER_SIZE).decode(FORMAT)
             print(f"From Server: {from_server}")
             global INPUT_COMMAND, is_transfer_complete
-            if not isinstance(INPUT_COMMAND, list):
+            if not isinstance(INPUT_COMMAND, list) and len(INPUT_COMMAND) != 0:
                 INPUT_COMMAND = INPUT_COMMAND.split()
 
             if from_server != "200":

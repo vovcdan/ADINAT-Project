@@ -72,12 +72,13 @@ def on_exit():
 signal.signal(signal.SIGTERM, on_exit)
 
 
-def broadcast(message):
+def broadcast(message, sock):
     """
-    Sends a message to all the connected clients through their sockets.
+    Sends a message to all the connected clients through their sockets apart to the client who sent the command.
     This function also writes to the log file the message sent.
 
     :param message: The message to be sent.
+    :param sock: Socket of the user.
     :return:
     """
     global can_access_data
@@ -85,8 +86,9 @@ def broadcast(message):
         accessing_data_condition.wait_for(lambda: can_access_data)
         can_access_data = False
         for user in clients:
-            socket_client = user.socket
-            socket_client.sendall(message.encode(FORMAT))
+            if user.socket != sock:
+                socket_client = user.socket
+                socket_client.sendall(message.encode(FORMAT))
         write_to_log(f"RESPONSE: {message}")
 
     with mutex_access_data:
@@ -348,7 +350,7 @@ def signup_from_srv(socket, username):
         with mutex_access_data:
             can_access_data = True
             accessing_data_condition.notify_all()
-        broadcast(f"signupFromSrv|{username}")
+        broadcast(f"signupFromSrv|{username}", socket)
         unicast("200", socket)
     except s.error:
         unicast("500", socket)
@@ -406,7 +408,7 @@ def msg_from_server(username, message, socket):
     :param socket: Socket of the user.
     """
     try:
-        broadcast(f"msgFromSrv|{username}|{message}")
+        broadcast(f"msgFromSrv|{username}|{message}", socket)
         unicast("200", socket)
     except s.error:
         unicast("500", socket)
@@ -450,7 +452,7 @@ def exit_from_server(username, socket):
             remove_user(socket)
         socket.close()
         if username is not None:
-            broadcast(f"exitedFromSrv|{username}")
+            broadcast(f"exitedFromSrv|{username}", socket)
         print(f"Client {str(adr_client)} disconnected.")
     except s.error:
         unicast("500", socket)
@@ -499,7 +501,7 @@ def afk_from_server(user):
     """
     try:
         user.state = 'afk'
-        broadcast(f"afkFromSrv|{user.username}")
+        broadcast(f"afkFromSrv|{user.username}", user.socket)
         unicast("200", user.socket)
     except s.error:
         unicast("500", user.socket)
@@ -547,7 +549,7 @@ def btk_from_server(user):
     """
     try:
         user.state = 'chatting'
-        broadcast(f"btkFromSrv|{user.username}")
+        broadcast(f"btkFromSrv|{user.username}", user.socket)
         unicast("200", user.socket)
     except s.error:
         unicast("500", user.socket)
@@ -757,7 +759,7 @@ def rename_from_server(user, new_username, socket):
             can_access_data = True
             accessing_data_condition.notify_all()
 
-        broadcast(f"renameFromSrv|{old_username}|{new_username}")
+        broadcast(f"renameFromSrv|{old_username}|{new_username}", socket)
         unicast("200", socket)
     except s.error:
         unicast("500", socket)
@@ -1480,7 +1482,7 @@ def process_client(client_socket, client_address):
                 username = user.username
             # removes the user from the clients list
                 remove_user(client_socket)
-                broadcast(f"exitedFromSrv|{username}")
+                broadcast(f"exitedFromSrv|{username}", client_socket)
             write_to_log(f"SUDDEN DISCONNECT FROM {str(adr_client)}")
             client_socket.close()
             print(f"Client {str(client_address)} disconnected.")
